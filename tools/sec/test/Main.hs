@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Control.Monad (unless)
+import Control.Monad (forM_, unless)
 import Data.List (isInfixOf)
 import System.Directory (
     Permissions (executable),
@@ -72,12 +72,12 @@ main = do
                 , ("FAKE_STATUS", statusJSON state url)
                 ]
             invoke f input vars = runSec tools f input vars ["probe"]
-            completed f prefix = expectCompleted tools f prefix "bw://" [] ExitSuccess
+            completed f prefix = expectLaunch tools f prefix "bw://" "probe" [] ExitSuccess
         test "nested Git, custom provider, argv, and environment" $ \f -> do
             let tricky = ["a b", "", "--option=value", "*", "a'b\"c", "line 1\nline 2", "$(exit 99); & |"]
                 vars = custom "unlocked" (show customServer) ++ [("BW_SESSION", staleSession)]
             result <- runSec tools f (Terminal "") vars ("probe" : tricky)
-            expectCompleted tools f ["bw status", "bw unlock --raw"] ("bw://?server=" ++ customServer) tricky ExitSuccess result
+            expectLaunch tools f ["bw status", "bw unlock --raw"] ("bw://?server=" ++ customServer) "probe" tricky ExitSuccess result
         test "no manifest within Git boundary" $ \f -> do
             let inner = work f </> "inner repository"
             createDirectory inner
@@ -121,7 +121,40 @@ main = do
             expectStop result ["bw status", "bw unlock --raw"] "bw unlock failed"
         test "command nonzero exit status is preserved" $ \f -> do
             result <- invoke f (Terminal "") [("FAKE_EXIT", "42"), ("SEC_VAULTWARDEN_URL", "")]
-            expectCompleted tools f ["bw status", "bw unlock --raw"] "bw://" [] (ExitFailure 42) result
+            expectLaunch tools f ["bw status", "bw unlock --raw"] "bw://" "probe" [] (ExitFailure 42) result
+        test "escaped set still launches a command" $ \f -> do
+            let commandArgs = ["--flag", "not a key"]
+            result <- runSec tools f (Terminal "") [("FAKE_EXIT", "37")] (["--", "set"] ++ commandArgs)
+            expectLaunch tools f ["bw status", "bw unlock --raw"] "bw://" "set" commandArgs (ExitFailure 37) result
+        test "set uses nearest manifest, custom provider, and one TTY unlock" $ \f -> do
+            let keys = ["_", "aZ_09", "A"]
+                vars = custom "locked" (show customServer) ++ [("BW_SESSION", staleSession)]
+            result <- runSec tools f (Terminal "") vars ("set" : keys)
+            expectSet f ["bw status", "bw unlock --raw"] ("bw://?server=" ++ customServer) keys ExitSuccess result
+        test "set logs in once for multiple writes" $ \f -> do
+            let keys = ["FIRST", "SECOND"]
+            result <- runSec tools f (Terminal "y\n") (hosted "unauthenticated") ("set" : keys)
+            expectOutput result "[y/N]"
+            expectSet f ["bw status", "bw login --raw", "bw status"] "bw://" keys ExitSuccess result
+        test "set stops at the first failed write and reports earlier successes" $ \f -> do
+            let written = ["WRITTEN_FIRST", "WRITTEN_SECOND"]
+                failed = "FAIL_HERE"
+                attempted = written ++ [failed]
+                vars = ("FAKE_SET_FAIL_KEY", failed) : hosted "locked"
+            result <- runSec tools f (Terminal "") vars ("set" : attempted ++ ["MUST_NOT_WRITE"])
+            expectSet f ["bw status", "bw unlock --raw"] "bw://" attempted (ExitFailure 43) result
+            mapM_ (expectOutput result) written
+        test "set validates all keys before authentication" $ \f -> do
+            let invalid = ["", "9KEY", "--help", "A-B", "A.B", "A B", "KEY=VALUE", "A\nB", "A\n", "ÉKEY", "Aé", "A١"]
+                rejected = [] : ["REPEAT", "DISTINCT", "REPEAT"] : map (\key -> ["VALID_FIRST", key]) invalid
+            forM_ rejected $ \keys -> do
+                result <- runSec tools f (Terminal "y\n") (hosted "unauthenticated") ("set" : keys)
+                assert (status result /= ExitSuccess) ("set accepted keys " ++ show keys)
+                equal ("calls for rejected keys " ++ show keys) [] (events result)
+                assert (not ("[y/N]" `isInfixOf` output result)) ("set prompted for authentication with rejected keys " ++ show keys)
+        test "set cannot unlock using piped input" $ \f -> do
+            result <- runSec tools f (Pipe "") (hosted "locked") ["set", "A_KEY"]
+            expectStop result ["bw status"] "unlock"
         case realSecretspec of
             Nothing -> pure ()
             Just executablePath -> test "real SecretSpec resolves a fake Vaultwarden item" $ \f -> do
@@ -159,6 +192,7 @@ fixture tools dir = do
         manifestPath = repo </> "secretspec.toml"
         vars =
             [ ("HOME", home)
+            , ("LANG", "C.UTF-8")
             , ("PATH", bin)
             , ("SHELL", sh tools)
             , ("GIT_CONFIG_NOSYSTEM", "1")
@@ -179,7 +213,7 @@ fixture tools dir = do
     createFileLink (git tools) (bin </> "git")
     make (fake </> "bw") fakeBw
     make (fake </> "secretspec") fakeSecretspec
-    make (bin </> "probe") fakeProbe
+    mapM_ (\name -> make (bin </> name) fakeProbe) ["probe", "set"]
     mapM_ (\name -> make (bin </> name) ["echo 'unexpected PATH fallback: " ++ name ++ "' >&2", "exit 98"]) ["bw", "secretspec"]
     pure f
 
@@ -225,7 +259,18 @@ fakeBw =
 
 fakeSecretspec :: [String]
 fakeSecretspec =
-    [ "printf 'secretspec\n' >> \"$FAKE_DIR/events\""
+    [ "if [ \"${3-}\" = set ]; then"
+    , "  printf 'secretspec set\n' >> \"$FAKE_DIR/events\""
+    , "  printf '%s\\000' \"$(pwd -P)\" \"$@\" >> \"$FAKE_DIR/set-args\""
+    , "  test -t 0; test -t 1; test -t 2"
+    , "  test \"${BW_SESSION-}\" = \"$FAKE_SESSION\""
+    , "  bw sync"
+    , "  echo 'set stdout'"
+    , "  echo 'set stderr' >&2"
+    , "  if [ \"$9\" = \"${FAKE_SET_FAIL_KEY-}\" ]; then exit 43; fi"
+    , "  exit 0"
+    , "fi"
+    , "printf 'secretspec\n' >> \"$FAKE_DIR/events\""
     , "printf '%s\\000' \"$@\" > \"$FAKE_DIR/provider-args\""
     , "test \"${BW_SESSION-}\" = \"$FAKE_SESSION\""
     , "bw sync"
@@ -275,16 +320,25 @@ expectStop result calls diagnostic = do
     equal "calls" calls (events result)
     expectOutput result diagnostic
 
-expectCompleted :: Tools -> Fixture -> [String] -> String -> [String] -> ExitCode -> Result -> IO ()
-expectCompleted tools f calls provider args code result = do
+expectLaunch :: Tools -> Fixture -> [String] -> String -> String -> [String] -> ExitCode -> Result -> IO ()
+expectLaunch tools f calls provider command args code result = do
     equal ("exit status; output: " ++ output result ++ "; calls: " ++ show (events result)) code (status result)
     equal "calls" (calls ++ ["secretspec", "bw sync", "probe"]) (events result)
-    let expectedProvider = ["--file", manifest f, "run", "--profile", "default", "--provider", provider, "--", sec tools, "--internal-exec", originalPath f, "probe"]
+    let expectedProvider = ["--file", manifest f, "run", "--profile", "default", "--provider", provider, "--", sec tools, "--internal-exec", originalPath f, command]
     providerArgs <- readFile' (root f </> "provider-args")
     equal "secretspec argv" (nulFields (expectedProvider ++ args)) providerArgs
     probeArgs <- readFile' (root f </> "probe-args")
     equal "command cwd, PATH, session absence, injected secret and argv" (nulFields ([work f, originalPath f, "", "secret from fake provider"] ++ args)) probeArgs
     mapM_ (expectOutput result) ["probe stdout", "probe stderr"]
+
+expectSet :: Fixture -> [String] -> String -> [String] -> ExitCode -> Result -> IO ()
+expectSet f calls provider keys code result = do
+    equal ("exit status; output: " ++ output result ++ "; calls: " ++ show (events result)) code (status result)
+    equal "calls" (calls ++ concatMap (const ["secretspec set", "bw sync"]) keys) (events result)
+    let invocation key = [work f, "--file", manifest f, "set", "--profile", "default", "--provider", provider, "--", key]
+    setArgs <- readFile' (root f </> "set-args")
+    equal "set cwd and argv for each write" (nulFields (concatMap invocation keys)) setArgs
+    mapM_ (expectOutput result) ["set stdout", "set stderr"]
 
 nulFields :: [String] -> String
 nulFields = concatMap (++ "\NUL")

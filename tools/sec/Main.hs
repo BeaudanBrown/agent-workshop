@@ -5,15 +5,15 @@ module Main (main) where
 import Control.Exception (IOException, evaluate, handle)
 import Control.Monad (unless, when)
 import Data.Aeson (FromJSON (parseJSON), eitherDecodeStrict', withObject, (.:), (.:?))
-import Data.Char (isAlphaNum, isAscii, isSpace, toLower)
-import Data.List (dropWhileEnd, isPrefixOf, stripPrefix)
+import Data.Char (isAlpha, isAlphaNum, isAscii, isSpace, toLower)
+import Data.List (dropWhileEnd, intercalate, isPrefixOf, nub, stripPrefix)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import System.Directory (doesFileExist, doesPathExist, getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv)
-import System.Exit (ExitCode (ExitSuccess), die)
+import System.Exit (ExitCode (ExitSuccess), die, exitWith)
 import System.FilePath (isAbsolute, takeDirectory, takeFileName, (</>))
-import System.IO (hFlush, hGetContents, hIsEOF, hIsTerminalDevice, hPutStr, stderr, stdin)
+import System.IO (hFlush, hGetContents, hIsEOF, hIsTerminalDevice, hPutStr, hPutStrLn, stderr, stdin)
 import System.Posix.Process (executeFile)
 import System.Process (CreateProcess (..), StdStream (..), proc, readCreateProcessWithExitCode, waitForProcess, withCreateProcess)
 
@@ -35,18 +35,32 @@ main :: IO ()
 main = handle ioFailure $ do
     args <- getArgs
     case args of
-        ["--help"] -> putStrLn "Usage: sec COMMAND [ARG ...]\nRun a trusted command with the nearest project's default SecretSpec profile."
+        ["--help"] -> putStrLn $ unlines [usage, "Run a trusted command or set values in the nearest project's default SecretSpec profile."]
+        ["set", "--help"] -> putStrLn setUsage
+        "set" : keys -> setSecrets keys
         "--internal-exec" : originalPath : command : rest -> launch (Just originalPath) command rest
         "--internal-exec-no-path" : command : rest -> launch Nothing command rest
         "--" : command : rest -> run command rest
         command : rest | not ("-" `isPrefixOf` command) -> run command rest
-        _ -> die "Usage: sec COMMAND [ARG ...]"
+        _ -> die usage
   where
     ioFailure :: IOException -> IO ()
     ioFailure _ = die "sec: I/O failure; check terminal, project files, and executable paths."
 
-run :: FilePath -> [String] -> IO ()
-run command args = do
+usage, setUsage :: String
+usage = "Usage: sec [--] COMMAND [ARG ...]\n       sec set KEY [KEY ...]"
+setUsage = "Usage: sec set KEY [KEY ...]\nUnlock once and prompt for each value in the project's default profile."
+
+data Session = Session
+    { executable :: FilePath
+    , manifestPath :: FilePath
+    , providerUri :: String
+    , sessionEnv :: [(String, String)]
+    , userPath :: Maybe String
+    }
+
+prepareSession :: IO Session
+prepareSession = do
     manifest <- getCurrentDirectory >>= locateManifest
     bw <- configuredExecutable "SEC_BW" "bw"
     secretSpec <- configuredExecutable "SEC_SECRETSPEC" "secretspec"
@@ -67,16 +81,44 @@ run command args = do
             when (stateAfterLogin == SignedOut) $ die "sec: Bitwarden is still signed out after login."
             if null fromLogin then unlock bw cleanEnv else validateToken fromLogin
         _ -> unlock bw cleanEnv
+    let envForResolution = putEnv "BW_SESSION" token (putEnv "PATH" providerPath cleanEnv)
+    pure (Session secretSpec manifest provider envForResolution originalPath)
+
+secretSpecArgs :: Session -> String -> [String] -> [String]
+secretSpecArgs session action args =
+    ["--file", manifestPath session, action, "--profile", "default", "--provider", providerUri session, "--"] ++ args
+
+run :: FilePath -> [String] -> IO ()
+run command args = do
+    session <- prepareSession
     self <- getExecutablePath
-    let launcher = maybe ["--internal-exec-no-path"] (\path -> ["--internal-exec", path]) originalPath
-        envForResolution = putEnv "BW_SESSION" token (putEnv "PATH" providerPath cleanEnv)
-        invocation =
-            ["--file", manifest, "run", "--profile", "default", "--provider", provider, "--"]
-                ++ [self]
-                ++ launcher
-                ++ (command : args)
+    let launcher = maybe ["--internal-exec-no-path"] (\path -> ["--internal-exec", path]) (userPath session)
+        invocation = secretSpecArgs session "run" ([self] ++ launcher ++ (command : args))
     -- Execute SecretSpec directly so it receives signals and preserves the child's exit status.
-    executeFile secretSpec False invocation (Just envForResolution)
+    executeFile (executable session) False invocation (Just (sessionEnv session))
+
+setSecrets :: [String] -> IO ()
+setSecrets keys = do
+    when (null keys) $ die setUsage
+    unless (all validKey keys) $ die "sec set: keys must be environment variable names (ASCII letters, digits or underscores; cannot start with a digit)."
+    unless (nub keys == keys) $ die "sec set: duplicate keys are not allowed."
+    session <- prepareSession
+    writeBatch session [] keys
+  where
+    validKey [] = False
+    validKey (first : rest) = (first == '_' || isAscii first && isAlpha first) && all (\c -> c == '_' || isAscii c && isAlphaNum c) rest
+
+writeBatch :: Session -> [String] -> [String] -> IO ()
+writeBatch _ _ [] = pure ()
+writeBatch session saved (key : rest) = do
+    let child = (proc (executable session) (secretSpecArgs session "set" [key])){env = Just (sessionEnv session), delegate_ctlc = True}
+        reportFailure = hPutStrLn stderr $ "sec set: stopped at " ++ key ++ ". Previously saved: " ++ if null saved then "none." else intercalate ", " (reverse saved) ++ "."
+        childFailure :: IOException -> IO ExitCode
+        childFailure _ = reportFailure >> die "sec set: could not run SecretSpec."
+    result <- handle childFailure $ withCreateProcess child $ \_ _ _ process -> waitForProcess process
+    if result == ExitSuccess
+        then writeBatch session (key : saved) rest
+        else reportFailure >> exitWith result
 
 locateManifest :: FilePath -> IO FilePath
 locateManifest dir = do

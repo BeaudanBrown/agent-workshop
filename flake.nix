@@ -91,7 +91,7 @@
               ''
                 cp ${./tools/sec/test/Main.hs} Main.hs
                 ghc -Wall -Werror Main.hs -o sec-tests
-                SEC_TEST_SHELL=${pkgs.runtimeShell} ./sec-tests ${packages.sec}/libexec/sec ${
+                LC_ALL=C.UTF-8 SEC_TEST_SHELL=${pkgs.runtimeShell} ./sec-tests ${packages.sec}/libexec/sec ${
                   sec-tools-nixpkgs.legacyPackages.${system}.secretspec
                 }/bin/secretspec
                 touch "$out"
