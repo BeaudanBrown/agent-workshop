@@ -3,6 +3,8 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    # This pin provides SecretSpec 0.21.1 with the bw provider.
+    sec-tools-nixpkgs.url = "github:NixOS/nixpkgs/623ef1c827745a0d653f72992ac1e222e81ebb2a";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -19,6 +21,7 @@
       nixpkgs,
       matt-pocock-skills,
       treefmt-nix,
+      sec-tools-nixpkgs,
       ...
     }:
     let
@@ -34,6 +37,8 @@
       };
     in
     {
+      homeManagerModules.sec = import ./modules/home-manager/sec.nix { inherit self sec-tools-nixpkgs; };
+
       packages = forEachSystem (
         system:
         let
@@ -47,6 +52,10 @@
             nativeBuildInputs = [ (pkgs.ghc.withPackages (p: [ p.temporary ])) ];
             buildPhase = "ghc -Wall -Werror Main.hs -o check-index";
             installPhase = "install -Dm755 check-index $out/bin/check-index";
+          };
+          sec = pkgs.callPackage ./tools/sec/package.nix {
+            bw = pkgs.bitwarden-cli;
+            inherit (sec-tools-nixpkgs.legacyPackages.${system}) secretspec;
           };
           skills = pkgs.linkFarm "agent-workshop-skills" (
             nixpkgs.lib.mapAttrsToList (
@@ -70,6 +79,23 @@
         {
           formatting = formatting.${system}.config.build.check self;
           inherit (packages) check-index;
+          sec =
+            pkgs.runCommand "sec-tests"
+              {
+                nativeBuildInputs = [
+                  (pkgs.ghc.withPackages (p: [ p.temporary ]))
+                  pkgs.git
+                  pkgs.util-linux
+                ];
+              }
+              ''
+                cp ${./tools/sec/test/Main.hs} Main.hs
+                ghc -Wall -Werror Main.hs -o sec-tests
+                SEC_TEST_SHELL=${pkgs.runtimeShell} ./sec-tests ${packages.sec}/libexec/sec ${
+                  sec-tools-nixpkgs.legacyPackages.${system}.secretspec
+                }/bin/secretspec
+                touch "$out"
+              '';
           writing-for-agents-reference = pkgs.runCommand "writing-for-agents-reference" { } ''
             test -r ${packages.skills}/writing-for-agents/SKILL-MECHANICS.md
             touch "$out"

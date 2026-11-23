@@ -36,7 +36,24 @@
       "inputs": {
         "matt-pocock-skills": "matt-pocock-skills",
         "nixpkgs": "nixpkgs",
+        "sec-tools-nixpkgs": "sec-tools-nixpkgs",
         "treefmt-nix": "treefmt-nix"
+      }
+    },
+    "sec-tools-nixpkgs": {
+      "locked": {
+        "lastModified": 1794382513,
+        "narHash": "sha256-0KLWXQ/XHeSz0ofuaiI7LqOaPeXprxhAq5KaSe88aL8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "623ef1c827745a0d653f72992ac1e222e81ebb2a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "623ef1c827745a0d653f72992ac1e222e81ebb2a",
+        "type": "github"
       }
     },
     "treefmt-nix": {
