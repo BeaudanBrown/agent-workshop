@@ -33,6 +33,9 @@
         system: treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} ./treefmt.nix
       );
       selectedSkills = {
+        domain-modeling = "${matt-pocock-skills}/skills/engineering/domain-modeling";
+        grill-with-docs = "${matt-pocock-skills}/skills/engineering/grill-with-docs";
+        grilling = "${matt-pocock-skills}/skills/productivity/grilling";
         writing-for-agents = "${matt-pocock-skills}/skills/productivity/writing-for-agents";
       };
     in
