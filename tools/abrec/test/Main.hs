@@ -345,6 +345,8 @@ siteTests = withSystemTempDirectory "abrec-site" $ \root -> do
     contains "library season" "<itunes:season>1</itunes:season>" libraryFeed
     index <- TIO.readFile (site </> "index.html")
     contains "noindex" "noindex" index
+    contains "library feed address is absolute" ("value=\"" <> base <> "feed.xml\"") index
+    contains "library podcast link is absolute" ("podcast://audiobooks.example.com/" <> secret <> "/feed.xml") index
     assert (not ("Piranesi" `T.isInfixOf` index)) "hidden books are not listed"
     bookIndex <- TIO.readFile (site </> "the-hobbit" </> "index.html")
     contains "podcast link" ("podcast://audiobooks.example.com/" <> secret <> "/the-hobbit/feed.xml") bookIndex

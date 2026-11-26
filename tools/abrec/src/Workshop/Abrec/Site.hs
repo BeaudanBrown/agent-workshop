@@ -142,7 +142,7 @@ writeRelease partial secret publicUrl meta (libraryArtwork, libraryArtworkFile) 
     TIO.writeFile (root </> "style.css") listenerStyle
     link libraryArtwork (root </> T.unpack libraryArtworkFile)
     TIO.writeFile (root </> "feed.xml") (renderFeed (libraryChannel base meta libraryArtworkFile shelves))
-    BL.writeFile (root </> "index.html") (renderHtml (libraryPage meta libraryArtworkFile shelves))
+    BL.writeFile (root </> "index.html") (renderHtml (libraryPage base meta libraryArtworkFile shelves))
     forM_ shelves $ \shelf -> do
         let slug = entrySlug (shelfEntry shelf)
             dir = root </> T.unpack slug
@@ -231,8 +231,8 @@ describe book = fromMaybe ("Read aloud: " <> bookTitle book) (bookDescription bo
 
 -- Listener pages -------------------------------------------------------
 
-libraryPage :: LibraryMeta -> Text -> [Shelf] -> Html
-libraryPage meta artworkFile shelves =
+libraryPage :: Text -> LibraryMeta -> Text -> [Shelf] -> Html
+libraryPage base meta artworkFile shelves =
     page
         (metaTitle meta)
         "style.css"
@@ -246,7 +246,7 @@ libraryPage meta artworkFile shelves =
             <section class="follow">
                 <h2>Follow everything</h2>
                 <p>One show with every book as a season. New books appear without following again.</p>
-                {followLinks "feed.xml"}
+                {followLinks (base <> "feed.xml")}
             </section>
         |]
   where
