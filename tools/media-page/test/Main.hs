@@ -9,11 +9,12 @@ import Data.ByteString.Lazy qualified as BL
 import Data.List (isInfixOf, isPrefixOf, sort)
 import Data.Text (Text)
 import Data.Text qualified as T
-import System.Directory (doesDirectoryExist, getDirectoryContents, getModificationTime, listDirectory)
+import System.Directory (doesDirectoryExist, getDirectoryContents, getModificationTime, listDirectory, removeDirectoryRecursive)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..), die)
 import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
 import System.IO.Temp (withSystemTempDirectory)
+import System.Posix.Files (fileMode, getFileStatus, setFileCreationMask)
 import System.Process (readProcessWithExitCode)
 import Workshop.MediaPage.Build (Config (..), buildPage, defaultMaxBytes)
 import Workshop.MediaPage.Document
@@ -215,6 +216,15 @@ pipelineTests = do
         images <- mapM (fmap (filter (\f -> "width=" `isPrefixOf` f || "height=" `isPrefixOf` f)) . probeFacts ffprobe) (cached "-image-")
         equal "image sizes" [["width=160", "height=120"], ["width=1920", "height=960"], ["width=300", "height=200"]] (sort images)
         equal "looping gif entries" 1 (length (cached "-loop-"))
+
+        -- Another user shares the cache and reads the pages, so both must get
+        -- the ordinary creation mode, not a private temporary-file mode. A
+        -- permissive umask makes the difference observable.
+        _ <- setFileCreationMask 0o022
+        removeDirectoryRecursive out
+        rebuilt <- buildPage config source >>= either (die . unlines) pure
+        modes <- mapM (fmap fileMode . getFileStatus) (rebuilt : cached "")
+        equal "page and cache file modes" (map (const 0o100644) modes) modes
 
         stamps <- mapM getModificationTime (cached "")
         second <- buildPage config source >>= either (die . unlines) pure

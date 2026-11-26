@@ -58,4 +58,5 @@ test-suite media-page-test
     , process
     , temporary
     , text
+    , unix
     , workshop-test

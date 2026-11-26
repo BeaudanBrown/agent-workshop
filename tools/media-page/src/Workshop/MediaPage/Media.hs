@@ -26,9 +26,8 @@ import Data.Char (toLower)
 import Data.Maybe (mapMaybe)
 import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
 import System.Exit (ExitCode (..))
-import System.FilePath (takeDirectory, takeExtension, (</>))
-import System.IO (hClose, openTempFile)
-import System.Process (readProcessWithExitCode)
+import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
+import System.Process (getCurrentPid, readProcessWithExitCode)
 import Text.Read (readMaybe)
 
 data Tools = Tools
@@ -155,8 +154,10 @@ encodeMedia tools cacheDir source kind = do
 
 encodeTo :: Tools -> Preset -> Bool -> FilePath -> FilePath -> IO (Either String ())
 encodeTo tools preset audio source target = do
-    (partial, handle) <- openTempFile (takeDirectory target) ("partial" ++ presetExtension preset)
-    hClose handle
+    pid <- getCurrentPid
+    -- A named partial file, not openTempFile: its private mode would survive the
+    -- rename and lock other users out of the shared cache.
+    let partial = takeDirectory target </> (".partial-" ++ show pid ++ "-" ++ takeFileName target)
     let arguments =
             ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", source]
                 ++ presetArguments preset audio

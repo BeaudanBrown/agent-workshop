@@ -11,6 +11,7 @@
   process,
   temporary,
   text,
+  unix,
   workshop-cli,
   workshop-test,
 }:
@@ -41,6 +42,7 @@ mkDerivation {
     process
     temporary
     text
+    unix
     workshop-test
   ];
   description = "Build self-contained HTML pages that present images and video";

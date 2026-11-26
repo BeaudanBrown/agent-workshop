@@ -27,7 +27,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8')
 import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
 import System.FilePath (isAbsolute, takeDirectory, takeExtension, takeFileName, (</>))
-import System.IO (hClose, openTempFile)
+import System.Process (getCurrentPid)
 import Text.Printf (printf)
 import Workshop.MediaPage.Document
 import Workshop.MediaPage.Media
@@ -102,9 +102,11 @@ buildPage config input = do
                         Just path -> path
                         Nothing -> configOutDir config </> slug (docTitle doc) ++ "-" ++ digest ++ ".html"
                 createDirectoryIfMissing True (takeDirectory target)
-                (partial, handle) <- openTempFile (takeDirectory target) (".partial-" ++ takeFileName target)
-                BS.hPut handle page
-                hClose handle
+                pid <- getCurrentPid
+                -- Written by name so the page gets the usual creation mode; a
+                -- private openTempFile mode would survive the rename.
+                let partial = takeDirectory target </> (".partial-" ++ show pid ++ "-" ++ takeFileName target)
+                BS.writeFile partial page
                 renameFile partial target
                 pure (Right target)
 
