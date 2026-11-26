@@ -136,6 +136,51 @@ parserTests = do
             )
         )
         (parseDocument questionsSample)
+    equal
+        "lists, code and tables"
+        ( Right
+            ( Document
+                "T"
+                Nothing
+                Nothing
+                False
+                [ Section
+                    (Just "S")
+                    4
+                    [ List ["one", "two"]
+                    , Paragraph "Para"
+                    , Code (Just "diff") ["-a", "+b"]
+                    , Table ["h1", "h,2"] [["x", "say \"hi\""]]
+                    , Ask (Question FreeText 19 "Q?" [Code Nothing ["  code"]] [])
+                    ]
+                ]
+            )
+        )
+        ( parseDocument
+            ( withHeader
+                [ "# S"
+                , "- one"
+                , "- two"
+                , "Para"
+                , ""
+                , "```diff"
+                , "-a"
+                , "+b"
+                , "```"
+                , "```csv"
+                , "h1, \"h,2\""
+                , ""
+                , "x,\"say \"\"hi\"\"\""
+                , "```"
+                , "::: text"
+                , "Q?"
+                , "```"
+                , "  code"
+                , "```"
+                , ":::"
+                ]
+            )
+        )
     forM_ rejections $ \(source, expected) -> case parseDocument source of
         Right _ -> die ("accepted invalid source: " ++ show source)
         Left errs -> do
@@ -149,7 +194,7 @@ withHeader body = T.unlines (["---", "title: T", "---"] ++ body)
 
 rejections :: [(Text, [(Int, Text)])]
 rejections =
-    [ (withHeader ["# S", "- item"], [(5, "lists, quotes and tables")])
+    [ (withHeader ["# S", "> quote"], [(5, "quotes are not supported")])
     , (withHeader ["# S", "See [docs](https://example.test)"], [(5, "links are not supported")])
     , (withHeader ["# S", "**bold**"], [(5, "bold and italic")])
     , (withHeader ["# S", "Run `make`"], [(5, "inline code")])
@@ -159,10 +204,23 @@ rejections =
     , (withHeader ["# S", "::: grid", ":::"], [(5, "unknown container 'grid'")])
     , (withHeader ["# S", "::: tabs", "![c](a.png)", ":::"], [(5, "needs at least one"), (6, "start each tab")])
     , (withHeader ["# S", "## Heading"], [(5, "only used for tab labels")])
-    , (withHeader ["# S", "```csv"], [(5, "fenced blocks")])
+    , (withHeader ["# S", "```csv"], [(5, "never closed")])
     , (withHeader ["# S", "::: tabs", "## A", ":::"], [(6, "has no content")])
     , (withHeader ["# S", "::: tabs", "## A", "x", "::: tabs"], [(5, "never closed"), (8, "cannot be nested")])
-    , (withHeader ["# S", "- a", "**b**"], [(5, "lists"), (6, "bold")])
+    , (withHeader ["# S", "- a", "**b**"], [(6, "bold")])
+    , (withHeader ["# S", "- **a**"], [(5, "bold")])
+    , (withHeader ["# S", "-"], [(5, "a list item needs text")])
+    , (withHeader ["# S", "1. one"], [(5, "numbered lists")])
+    , (withHeader ["# S", "* a"], [(5, "write list items as '- item'")])
+    , (withHeader ["# S", "| a |"], [(5, "write tables as a ```csv block")])
+    , (withHeader ["# S", "~~~"], [(5, "not ~~~")])
+    , (withHeader ["# S", "```", "", "```"], [(5, "is empty")])
+    , (withHeader ["# S", "```c sharp", "x", "```"], [(5, "one word")])
+    , (withHeader ["# S", "```csv", "a,b", "1", "```"], [(7, "this row has 1 cells; the header has 2")])
+    , (withHeader ["# S", "```csv", "a,b", "```"], [(6, "at least one data row")])
+    , (withHeader ["# S", "```csv", "a,b", "\"x,1", "```"], [(7, "never closed")])
+    , (withHeader ["# S", "```csv", "a,b", "\"x\"y,1", "```"], [(7, "comma straight after")])
+    , (withHeader ["::: text", "```", "x", "```", "Q?", ":::"], [(5, "start the question with its text")])
     , (withHeader [], [(3, "add some content")])
     , (withHeader ["::: choice", "- a", "- b", ":::"], [(4, "needs its question"), (5, "before its options"), (6, "before its options")])
     , (withHeader ["::: choice", "Q?", "- only", ":::"], [(4, "at least two")])
@@ -193,7 +251,7 @@ goldenTests = do
     update <- (== Just "1") <$> lookupEnv "AGENT_PAGE_UPDATE_GOLDEN"
     forM_ goldens $ \(name, doc) -> do
         let path = "test" </> "golden" </> name
-            actual = BL.toStrict (toLazyByteString (renderPage "agent-page test · format 2" "/work/notes/page.md" doc))
+            actual = BL.toStrict (toLazyByteString (renderPage "agent-page test · format 3" "/work/notes/page.md" "0123abcd" doc))
         if update
             then BS.writeFile path actual
             else do
@@ -229,6 +287,24 @@ goldens =
             False
             [ Section (Just "Two tabs") 4 [Tabs [Tab "One" [Paragraph "First."], Tab "Two" [Media (Placed "Second" 8 (fake EmbeddedImage "image/webp" 10 10))]]]
             , Section (Just "Three tabs") 10 [Tabs [Tab "A" [Paragraph "a"], Tab "B" [Paragraph "b"], Tab "C" [Paragraph "c"]]]
+            ]
+        )
+    ,
+        ( "blocks.html"
+        , Document
+            "Blocks"
+            Nothing
+            Nothing
+            False
+            [ Section
+                (Just "Text blocks")
+                4
+                [ List ["First <item>", "Second & last"]
+                , Code (Just "diff") ["--- a/x", "+++ b/x", "@@ -1 +1 @@", "-old", "+new <tag>", " same"]
+                , Code (Just "haskell") ["main :: IO ()", "main = pure ()"]
+                , Code Nothing ["  indented", "", "after a blank"]
+                , Table ["Name", "Count"] [["A <b>", "1"], ["B", "2, two"]]
+                ]
             ]
         )
     ,
@@ -278,7 +354,7 @@ pipelineTests = do
     withSystemTempDirectory "agent-page-test" $ \tmp -> do
         let media = tmp </> "media"
             out = tmp </> "pages"
-            config = Config tools out defaultMaxBytes Nothing "agent-page test · format 2"
+            config = Config tools out defaultMaxBytes Nothing "agent-page test · format 3"
             generate name arguments = run ffmpeg (["-v", "error", "-y"] ++ arguments ++ [media </> name])
         run "mkdir" ["-p", media]
         generate "clip.mp4" ["-f", "lavfi", "-i", "testsrc2=size=1600x900:rate=30:duration=2", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:v", "libx264", "-c:a", "aac", "-shortest"]

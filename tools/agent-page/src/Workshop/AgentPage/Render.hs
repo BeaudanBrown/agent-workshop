@@ -15,7 +15,7 @@ module Workshop.AgentPage.Render (Placed (..), renderPage) where
 
 import Data.ByteString.Base64 qualified as Base64
 import Data.ByteString.Builder (Builder, byteString, intDec, stringUtf8)
-import Data.List (mapAccumL)
+import Data.List (intersperse, mapAccumL)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (encodeUtf8Builder)
@@ -43,12 +43,13 @@ data Counters = Counters
     , nextQuestion :: Int
     }
 
-{- | Render a page. The footer identifies the tool and format version; the
-source path appears in reply text so the agent can find what each reply is
-about.
+{- | Render a page. The footer identifies the tool and format version. The
+source path and the leading hex digits of its SHA-256 appear in reply text,
+so the agent can find what each reply is about and notice when the source
+has changed since the page was built.
 -}
-renderPage :: Text -> FilePath -> Document Placed -> Builder
-renderPage footer source doc =
+renderPage :: Text -> FilePath -> Text -> Document Placed -> Builder
+renderPage footer source digest doc =
     mconcat
         [ "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
         , "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
@@ -60,7 +61,14 @@ renderPage footer source doc =
         , foldMap tabRule [1 .. maximum (0 : concatMap (concatMap tabCounts . sectionBlocks) (docSections doc))]
         , "</style>\n</head>\n<body>\n"
         , if interactive
-            then "<main data-title=\"" <> escape (docTitle doc) <> "\" data-source=\"" <> escape (T.pack source) <> "\">\n"
+            then
+                "<main data-title=\""
+                    <> escape (docTitle doc)
+                    <> "\" data-source=\""
+                    <> escape (T.pack source)
+                    <> "\" data-source-sha256=\""
+                    <> escape digest
+                    <> "\">\n"
             else "<main>\n"
         , "<header>\n<h1>"
         , escape (docTitle doc)
@@ -101,6 +109,9 @@ renderSection reply counters section =
 renderBlock :: Env -> Counters -> Block Placed -> (Counters, Builder)
 renderBlock env counters block = case block of
     Paragraph text -> (counters, "<p>" <> escape text <> "</p>\n")
+    List items -> (counters, "<ul>\n" <> foldMap (\item -> "<li>" <> escape item <> "</li>\n") items <> "</ul>\n")
+    Code label codeLines -> (counters, renderCode label codeLines)
+    Table header rows -> (counters, renderTable header rows)
     Media placed -> (counters, renderMedia env placed)
     Ask question -> renderQuestion env counters question
     Tabs tabs ->
@@ -150,8 +161,58 @@ renderMedia env (Placed captionText line encoded) = case encodedAs encoded of
         "<figcaption>"
             <> caption
             <> "</figcaption>\n"
-            <> (if envReply env && not (envInQuestion env) then replyBox kind line (envPath env) (Just captionText) "Reply" else mempty)
+            <> (if envReply env && not (envInQuestion env) then feedback kind else mempty)
             <> "</figure>\n"
+    feedback kind =
+        "<div class=\"feedback\" data-item data-reply=\""
+            <> kind
+            <> "\" data-line=\""
+            <> intDec line
+            <> "\""
+            <> pathAttribute (envPath env)
+            <> " data-caption=\""
+            <> caption
+            <> "\">\n<div class=\"verdict\">"
+            <> foldMap verdict ["OK", "Change", "Question"]
+            <> "</div>\n<details><summary>Reply</summary>\n<textarea rows=\"3\" aria-label=\"Reply\"></textarea>\n</details>\n</div>\n"
+    verdict name =
+        "<label><input type=\"radio\" name=\"v"
+            <> intDec line
+            <> "\" value=\""
+            <> name
+            <> "\"><span>"
+            <> name
+            <> "</span></label>"
+
+-- | A code block; a diff colours added, removed and hunk lines.
+renderCode :: Maybe Text -> [Text] -> Builder
+renderCode label codeLines =
+    "<div class=\"code\">"
+        <> foldMap (\text -> "<div class=\"lang\">" <> escape text <> "</div>") label
+        <> "<pre><code>"
+        <> body
+        <> "</code></pre></div>\n"
+  where
+    body
+        | label == Just "diff" = mconcat (intersperse "\n" (map diffLine codeLines))
+        | otherwise = escape (T.intercalate "\n" codeLines)
+    diffLine text
+        | any (`T.isPrefixOf` text) ["+++", "---"] = marked "meta" text
+        | "+" `T.isPrefixOf` text = marked "add" text
+        | "-" `T.isPrefixOf` text = marked "del" text
+        | "@@" `T.isPrefixOf` text = marked "hunk" text
+        | otherwise = escape text
+    marked kind text = "<span class=\"" <> kind <> "\">" <> escape text <> "</span>"
+
+renderTable :: [Text] -> [[Text]] -> Builder
+renderTable header rows =
+    "<div class=\"table\"><table>\n<thead><tr>"
+        <> foldMap (cell "th") header
+        <> "</tr></thead>\n<tbody>\n"
+        <> foldMap (\row -> "<tr>" <> foldMap (cell "td") row <> "</tr>\n") rows
+        <> "</tbody>\n</table></div>\n"
+  where
+    cell tag text = "<" <> tag <> ">" <> escape text <> "</" <> tag <> ">"
 
 renderQuestion :: Env -> Counters -> Question Placed -> (Counters, Builder)
 renderQuestion env counters question =
@@ -284,6 +345,19 @@ stylesheet =
         , ".tabs>input:checked+label{color:var(--bg);background:var(--accent);border-color:var(--accent)}\n"
         , ".tabs>input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}\n"
         , ".tabs>.panel{display:none}\n"
+        , "ul{margin:0 0 14px;padding-left:22px}\n"
+        , ".code{margin:0 0 18px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}\n"
+        , ".code .lang{padding:4px 12px;color:var(--muted);font-size:.8rem;border-bottom:1px solid var(--line)}\n"
+        , ".code pre{margin:0;padding:10px 12px;overflow-x:auto;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}\n"
+        , ".code .add,.code .del{display:inline-block;min-width:100%}\n"
+        , ".code .add{background:rgba(46,160,67,.18)}\n"
+        , ".code .del{background:rgba(248,81,73,.18)}\n"
+        , ".code .hunk{color:var(--accent)}\n"
+        , ".code .meta{color:var(--muted)}\n"
+        , ".table{margin:0 0 18px;overflow-x:auto}\n"
+        , "table{border-collapse:collapse;background:var(--card);font-size:.93rem}\n"
+        , "th,td{padding:6px 10px;border:1px solid var(--line);text-align:left;vertical-align:top}\n"
+        , "th{background:var(--bg)}\n"
         , "footer{max-width:960px;margin:0 auto;padding:0 20px 28px;color:var(--muted);font-size:.8rem}\n"
         ]
 
@@ -293,8 +367,13 @@ interactiveStylesheet =
         [ "textarea,input[type=text]{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}\n"
         , "textarea:focus,input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}\n"
         , "summary{cursor:pointer;color:var(--accent);font-size:.93rem}\n"
-        , "details.reply{padding:0 14px 10px}\n"
-        , "section>details.reply{padding:0;margin:0 0 14px}\n"
+        , "section>details.reply{margin:0 0 14px}\n"
+        , ".feedback{padding:0 14px 12px}\n"
+        , ".verdict{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}\n"
+        , ".verdict input{position:absolute;opacity:0;pointer-events:none}\n"
+        , ".verdict span{display:inline-block;padding:1px 12px;border:1px solid var(--line);border-radius:999px;cursor:pointer;color:var(--muted);font-size:.88rem}\n"
+        , ".verdict input:checked+span{color:var(--bg);background:var(--accent);border-color:var(--accent)}\n"
+        , ".verdict input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}\n"
         , "details textarea{margin-top:8px}\n"
         , ".q{margin:0 0 22px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:10px;min-width:0}\n"
         , ".q>legend{float:left;width:100%;padding:0;margin:0 0 12px;font-weight:600}\n"
@@ -361,15 +440,16 @@ script =
         , "        parts.push(head + NL + '→ ' + (picks.length ? picks.join('; ') : '(nothing chosen)') + (note ? NL + 'note: ' + note : ''));"
         , "      } else {"
         , "        var text = value(el.querySelector('textarea'));"
-        , "        if (!text) continue;"
+        , "        var verdict = el.querySelector('.verdict input:checked');"
+        , "        if (!text && !verdict) continue;"
         , "        if (kind === 'overall') { parts.push('Overall' + NL + text); continue; }"
         , "        var caption = el.getAttribute('data-caption');"
-        , "        parts.push('Reply · ' + at + ' · ' + kind + (caption ? NL + '> \"' + caption + '\"' : '') + NL + text);"
+        , "        parts.push('Reply · ' + at + ' · ' + kind + (caption ? NL + '> \"' + caption + '\"' : '') + (verdict ? NL + '→ ' + verdict.value : '') + (text ? NL + text : ''));"
         , "      }"
         , "    }"
         , "    if (skipped.length) parts.push('Skipped: ' + skipped.join(', '));"
         , "    if (!parts.length) parts.push('(nothing entered yet)');"
-        , "    var header = ['agent-page reply · format 2', 'page: ' + main.getAttribute('data-title'), 'source: ' + source];"
+        , "    var header = ['agent-page reply · format 3', 'page: ' + main.getAttribute('data-title'), 'source: ' + source + ' · sha256 ' + main.getAttribute('data-source-sha256')];"
         , "    return header.join(NL) + NL + NL + parts.join(NL + NL) + NL;"
         , "  }"
         , "  function refresh(event) {"

@@ -116,12 +116,22 @@ data Draft = Draft
     -- ^ newest first
     }
 
+-- | An open fenced block: opening line, label, and lines newest first.
+data Fence = Fence
+    { fenceLine :: Int
+    , fenceLabel :: Text
+    , fenceLines :: [(Int, Text)]
+    }
+
 data State = State
     { stateSections :: [Section MediaRef]
     -- ^ completed sections, newest first
     , stateCurrent :: Maybe (Maybe Text, Int, [Block MediaRef])
     -- ^ open section: heading, line, blocks newest first
     , stateParagraph :: Maybe (Int, [Text])
+    , stateList :: Maybe (Int, [Text])
+    -- ^ open list: first line, items newest first
+    , stateFence :: Maybe Fence
     , stateTabs :: Maybe Container
     , stateDraft :: Maybe Draft
     , stateErrors :: [ParseError]
@@ -131,9 +141,12 @@ parseBody :: Int -> [(Int, Text)] -> ([ParseError], [Section MediaRef])
 parseBody lastLine numbered = (reverse (stateErrors final), reverse (stateSections final))
   where
     final = finish (foldl' step initial numbered)
-    initial = State [] Nothing Nothing Nothing Nothing []
+    initial = State [] Nothing Nothing Nothing Nothing Nothing Nothing []
     finish state0 =
-        let state1 = flushParagraph state0
+        let state1 = case stateFence state0 of
+                Just fence ->
+                    (failAt (fenceLine fence) "this ``` block is never closed; end it with a ``` line" state0){stateFence = Nothing}
+                Nothing -> flushText state0
             state2 = case stateDraft state1 of
                 Just draft ->
                     (failAt (draftLine draft) (opener draft <> " is never closed; end it with ':::'") state1){stateDraft = Nothing}
@@ -149,33 +162,41 @@ parseBody lastLine numbered = (reverse (stateErrors final), reverse (stateSectio
 
 step :: State -> (Int, Text) -> State
 step state (n, raw)
+    | Just fence <- stateFence state =
+        if line == "```"
+            then closeFence fence state{stateFence = Nothing}
+            else state{stateFence = Just fence{fenceLines = (n, raw) : fenceLines fence}}
     | skipping = if line == ":::" then closeContainer n state else state
-    | T.null line = flushParagraph state
-    | any (`T.isPrefixOf` line) ["```", "~~~"] =
-        failAt n "fenced blocks are reserved for future directive payloads (such as CSV tables) and are not supported yet" state
-    | line == ":::" = closeContainer n (flushParagraph state)
-    | ":::" `T.isPrefixOf` line = openContainer n (T.strip (T.drop 3 line)) (flushParagraph state)
+    | T.null line = flushText state
+    | "~~~" `T.isPrefixOf` line = failAt n "fence code blocks with ```, not ~~~" state
+    | "```" `T.isPrefixOf` line = openFence n (T.strip (T.drop 3 line)) (flushText state)
+    | line == ":::" = closeContainer n (flushText state)
+    | ":::" `T.isPrefixOf` line = openContainer n (T.strip (T.drop 3 line)) (flushText state)
     | "::" `T.isPrefixOf` line =
         failAt n "unknown directive; this version has no '::' leaf directives, so write media as '![caption](file)'" state
-    | "# " `T.isPrefixOf` line = newSection n (T.strip (T.drop 2 line)) (flushParagraph state)
-    | "## " `T.isPrefixOf` line = newTab n (T.strip (T.drop 3 line)) (flushParagraph state)
+    | "# " `T.isPrefixOf` line = newSection n (T.strip (T.drop 2 line)) (flushText state)
+    | "## " `T.isPrefixOf` line = newTab n (T.strip (T.drop 3 line)) (flushText state)
     | "#" `T.isPrefixOf` line = failAt n "only '# Section' headings and '## label' tab labels inside '::: tabs' are supported" state
-    | "![" `T.isPrefixOf` line = media n line (flushParagraph state)
-    | inQuestion && (line == "-" || "- " `T.isPrefixOf` line) = choiceLine n (T.strip (T.drop 1 line)) (flushParagraph state)
-    | isListOrQuote line =
-        failAt n (if inQuestion then "write each option as '- label'; other lists, quotes and tables are not supported" else "lists, quotes and tables are not supported; write plain paragraphs") state
-    | otherwise = paragraphLine n line state
+    | "![" `T.isPrefixOf` line = media n line (flushText state)
+    | dashItem && inQuestion = choiceLine n item (flushText state)
+    | dashItem = listItem n item (flushParagraph state)
+    | any (`T.isPrefixOf` line) ["* ", "+ "] =
+        failAt n (if inQuestion then "write each option as '- label'" else "write list items as '- item'") state
+    | numberedItem line = failAt n "numbered lists are not supported; write list items as '- item'" state
+    | line == ">" || "> " `T.isPrefixOf` line = failAt n "quotes are not supported; write plain paragraphs" state
+    | "|" `T.isPrefixOf` line = failAt n "write tables as a ```csv block" state
+    | otherwise = paragraphLine n line (flushList state)
   where
     line = T.strip raw
+    dashItem = line == "-" || "- " `T.isPrefixOf` line
+    item = T.strip (T.drop 1 line)
     inQuestion = isJust (stateDraft state)
     skipping = maybe False (isNothing . draftKind) (stateDraft state)
 
-isListOrQuote :: Text -> Bool
-isListOrQuote line =
-    any (`T.isPrefixOf` line) ["- ", "* ", "+ ", "> ", "|"] || orderedItem
+numberedItem :: Text -> Bool
+numberedItem line = not (T.null digits) && any (`T.isPrefixOf` rest) [". ", ") "]
   where
     (digits, rest) = T.span isDigit line
-    orderedItem = not (T.null digits) && any (`T.isPrefixOf` rest) [". ", ") "]
 
 -- | Why a line of text cannot be shown as written, if it cannot.
 inlineProblem :: Text -> Maybe Text
@@ -206,6 +227,86 @@ flushParagraph state = case stateParagraph state of
                 Just draft
                     | isNothing (draftText draft) -> cleared{stateDraft = Just draft{draftText = Just (start, text)}}
                 _ -> addContent start (Paragraph text) cleared
+
+-- | End any open paragraph or list.
+flushText :: State -> State
+flushText = flushList . flushParagraph
+
+flushList :: State -> State
+flushList state = case stateList state of
+    Nothing -> state
+    Just (start, items) -> addContent start (List (reverse items)) state{stateList = Nothing}
+
+listItem :: Int -> Text -> State -> State
+listItem n item state
+    | T.null item = failAt n "a list item needs text: '- item'" state
+    | Just problem <- inlineProblem item = failAt n problem state
+    | otherwise = case stateList state of
+        Just (start, items) -> state{stateList = Just (start, item : items)}
+        Nothing -> state{stateList = Just (n, [item])}
+
+{- | Open a fenced block. Its lines are kept exactly as written until a line
+that is only three backticks.
+-}
+openFence :: Int -> Text -> State -> State
+openFence n label state
+    | validLabel label = opened
+    | otherwise = failAt n "a ``` label is one word, such as ```diff, ```csv or ```haskell" opened
+  where
+    opened = state{stateFence = Just (Fence n label [])}
+
+validLabel :: Text -> Bool
+validLabel = T.all (\c -> isAlphaNum c || c `elem` ("+#._-" :: String))
+
+closeFence :: Fence -> State -> State
+closeFence fence state
+    | not (validLabel label) = state
+    | all (T.null . T.strip . snd) written = failAt (fenceLine fence) "this ``` block is empty" state
+    | label == "csv" = case parseTable written of
+        Left errs -> state{stateErrors = reverse errs ++ stateErrors state}
+        Right (header, rows) -> addContent (fenceLine fence) (Table header rows) state
+    | otherwise = addContent (fenceLine fence) (Code (if T.null label then Nothing else Just label) (map snd written)) state
+  where
+    label = fenceLabel fence
+    written = reverse (fenceLines fence)
+
+-- | A csv block: a header row, then data rows of the same width. Blank lines are ignored.
+parseTable :: [(Int, Text)] -> Either [ParseError] ([Text], [[Text]])
+parseTable written = case parsed of
+    [] -> Left []
+    (headerLine, Right header) : rows
+        | null rows -> Left [ParseError headerLine "a csv table needs a header row and at least one data row"]
+        | otherwise -> case concatMap (rowProblem (length header)) rows of
+            [] -> Right (header, [cells | (_, Right cells) <- rows])
+            problems -> Left problems
+    (headerLine, Left message) : rows -> Left (ParseError headerLine message : concatMap (rowProblem 0) rows)
+  where
+    parsed = [(n, parseCsvLine text) | (n, text) <- written, not (T.null (T.strip text))]
+    rowProblem width (n, result) = case result of
+        Left message -> [ParseError n message]
+        Right cells
+            | width > 0 && length cells /= width ->
+                [ParseError n ("this row has " <> T.pack (show (length cells)) <> " cells; the header has " <> T.pack (show width))]
+            | otherwise -> []
+
+-- | One csv line: comma-separated fields, optionally quoted with "" for a quote.
+parseCsvLine :: Text -> Either Text [Text]
+parseCsvLine = field [] . T.unpack
+  where
+    field acc s = case dropWhile (== ' ') s of
+        '"' : rest -> quoted acc "" rest
+        _ -> let (value, more) = break (== ',') s in next (T.strip (T.pack value) : acc) more
+    quoted acc buffer s = case s of
+        '"' : '"' : rest -> quoted acc ('"' : buffer) rest
+        '"' : rest -> case dropWhile (== ' ') rest of
+            [] -> Right (reverse (T.pack (reverse buffer) : acc))
+            ',' : more -> field (T.pack (reverse buffer) : acc) more
+            _ -> Left "put a comma straight after a quoted field's closing quote"
+        c : rest -> quoted acc (c : buffer) rest
+        [] -> Left "a quoted field is never closed; quoted fields cannot span lines"
+    next acc more = case more of
+        [] -> Right (reverse acc)
+        _ : rest -> field acc rest
 
 media :: Int -> Text -> State -> State
 media n line state = case parseMedia line of

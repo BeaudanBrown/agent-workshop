@@ -46,6 +46,25 @@ pkgs.runCommand "agent-page-render"
     ## Text
     Plain text in the third tab.
     :::
+    # Text blocks
+    - First item
+    - Second item
+
+    ```diff
+    -old line
+    +new line
+     same line
+    ```
+
+    ```csv
+    Name,Count
+    A,1
+    B,"2, two"
+    ```
+
+    ```haskell
+    main = pure ()
+    ```
     EOF
     cat > ask.md <<'EOF'
     ---
@@ -58,6 +77,11 @@ pkgs.runCommand "agent-page-render"
     Which layout?
 
     ![A synthetic still](still.png)
+
+    ```csv
+    Layout,Rows
+    Compact,"1,200"
+    ```
     - Compact (recommended)
     - Spacious
     :::
@@ -66,6 +90,7 @@ pkgs.runCommand "agent-page-render"
     ::: tabs
     ## Export
     ![Export still](still.png)
+    ![Second still](still.png)
     ## Xero
     ::: multi
     Which checks?

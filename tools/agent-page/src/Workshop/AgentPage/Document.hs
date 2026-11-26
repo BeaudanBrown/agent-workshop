@@ -39,6 +39,11 @@ data Section media = Section
 
 data Block media
     = Paragraph Text
+    | List [Text]
+    | -- | label and lines exactly as written; the label `diff` marks a diff
+      Code (Maybe Text) [Text]
+    | -- | header and rows, every row as wide as the header
+      Table [Text] [[Text]]
     | Media media
     | Tabs [Tab media]
     | Ask (Question media)
@@ -59,7 +64,7 @@ data Question media = Question
     -- ^ line of the question text
     , questionText :: Text
     , questionContext :: [Block media]
-    -- ^ paragraphs and media shown between the question and its options
+    -- ^ paragraphs, media, code and tables shown between the question and its options
     , questionChoices :: [Choice]
     -- ^ empty for free text
     }

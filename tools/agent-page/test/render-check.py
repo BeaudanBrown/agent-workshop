@@ -6,12 +6,14 @@ scripted: the page unchanged, loaded from a blob URL into an iframe sandboxed
           to allow-scripts and nothing else (Coding Tools on). The host page is
           served from an https origin, as DSH is.
 
-The media page must play every video, show every image and switch tabs in
-both modes. The question page must show its no-scripts notice in static mode,
-and in scripted mode turn what is entered into the exact reply text.
+The media page must play every video, show every image, switch tabs and show
+its list, code, diff and table in both modes. The question page must show its no-scripts notice in static mode,
+and in scripted mode turn what is entered, including verdicts, into the exact
+reply text.
 Usage: render-check.py MEDIA.html QUESTIONS.html QUESTIONS-SOURCE purify.min.js
 """
 
+import hashlib
 import pathlib
 import sys
 
@@ -55,6 +57,11 @@ STATE = """() => ({
   images: [...document.querySelectorAll('img')].map(i => i.naturalWidth),
   captions: [...document.querySelectorAll('figcaption')].length,
   scripts: document.querySelectorAll('script').length,
+  items: document.querySelectorAll('ul > li').length,
+  added: document.querySelectorAll('.code .add').length,
+  removed: document.querySelectorAll('.code .del').length,
+  codeBlocks: document.querySelectorAll('.code pre').length,
+  cells: document.querySelectorAll('.table td').length,
 })"""
 
 COPIED = "Copied. Paste it into the chat."
@@ -94,6 +101,9 @@ def check_media(browser, mode, html, purify):
         fail(mode, f"expected 3 captions, found {state['captions']}")
     if state["scripts"] != 0:
         fail(mode, "a page without questions or replies carries a script")
+    blocks = {key: state[key] for key in ("items", "added", "removed", "codeBlocks", "cells")}
+    if blocks != {"items": 2, "added": 1, "removed": 1, "codeBlocks": 2, "cells": 4}:
+        fail(mode, f"lists, code or tables did not render as expected: {blocks}")
     panels = frame.locator(".tabs > .panel")
     if not (panels.nth(0).is_visible() and panels.nth(1).is_hidden()):
         fail(mode, "the first tab is not the only visible panel")
@@ -124,9 +134,13 @@ def check_questions_scripted(browser, html, source):
     q.nth(0).get_by_label("Spacious").check()
     q.nth(0).locator("summary").click()
     q.nth(0).locator(".ap-note").fill("Looks cramped")
+    if frame.locator("fieldset.q").nth(0).locator(".table td").count() != 2:
+        fail(mode, "the table inside the first question did not render")
     export = frame.locator("figure", has_text="Export still")
+    export.locator(".verdict label", has_text="Change").click()
     export.locator("summary").click()
     export.locator("textarea").fill("Crop tighter")
+    frame.locator("figure", has_text="Second still").locator(".verdict label", has_text="OK").click()
     frame.locator(".tabs > label", has_text="Xero").click()
     q.nth(1).get_by_label("Totals").check()
     q.nth(1).locator(".ap-other").fill("Dates")
@@ -138,30 +152,36 @@ def check_questions_scripted(browser, html, source):
     frame.locator("#ap-copy").click()
     frame.wait_for_function(f"() => [{COPIED!r}, {BLOCKED!r}].includes(document.getElementById('ap-status').textContent)")
     file = pathlib.Path(source).name
+    digest = hashlib.sha256(pathlib.Path(source).read_bytes()).hexdigest()[:8]
     expected = "\n".join([
-        "agent-page reply · format 2",
+        "agent-page reply · format 3",
         "page: Ask check",
-        f"source: {source}",
+        f"source: {source} · sha256 {digest}",
         "",
         f"Q1 · {file}:8",
         "> Which layout?",
         "→ Spacious",
         "note: Looks cramped",
         "",
-        f"Reply · {file}:18 · Payroll › Export · image",
+        f"Reply · {file}:23 · Payroll › Export · image",
         '> "Export still"',
+        "→ Change",
         "Crop tighter",
         "",
-        f"Q2 · {file}:21 · Payroll › Xero",
+        f"Reply · {file}:24 · Payroll › Export · image",
+        '> "Second still"',
+        "→ OK",
+        "",
+        f"Q2 · {file}:27 · Payroll › Xero",
         "> Which checks?",
         "→ Totals; Other: Dates",
         "",
-        f"Q3 · {file}:28 · Payroll",
+        f"Q3 · {file}:34 · Payroll",
         "> Anything else?",
         "Ship it",
         "soon",
         "",
-        f"Reply · {file}:15 · Payroll · section",
+        f"Reply · {file}:20 · Payroll · section",
         "Good section",
         "",
         "Overall",

@@ -59,7 +59,7 @@ buildPage config input = do
                 Left errs -> failed [located (errorLine e) (T.unpack (errorMessage e)) | e <- errs]
                 Right doc -> do
                     problems <- concat <$> mapM checkSource (toList doc)
-                    if null problems then encodeAll doc else failed problems
+                    if null problems then encodeAll (fingerprint bytes) doc else failed problems
   where
     failed = pure . Left
     baseDir = takeDirectory input
@@ -79,11 +79,14 @@ buildPage config input = do
             exists <- doesFileExist (resolve ref)
             pure [located (refLine ref) ("no such file: " ++ resolve ref) | not exists]
 
-    encodeAll doc = do
+    -- The leading hex digits of the source's SHA-256, quoted in replies.
+    fingerprint = T.pack . take 8 . BC.unpack . Base16.encode . SHA256.hash
+
+    encodeAll sourceDigest doc = do
         placed <- traverse encodeRef doc
         case sequenceA placed of
             Left err -> failed [err]
-            Right ready -> writePage ready
+            Right ready -> writePage sourceDigest ready
 
     encodeRef ref = case sourceKind (refPath ref) of
         Nothing -> pure (Left (located (refLine ref) "unsupported media type"))
@@ -91,9 +94,9 @@ buildPage config input = do
             result <- encodeMedia (configTools config) (configOutDir config </> ".cache") (resolve ref) kind
             pure (either (Left . located (refLine ref)) (Right . Placed (refCaption ref) (refLine ref)) result)
 
-    writePage doc = do
+    writePage sourceDigest doc = do
         source <- makeAbsolute input
-        let page = BL.toStrict (toLazyByteString (renderPage (configFooter config) source doc))
+        let page = BL.toStrict (toLazyByteString (renderPage (configFooter config) source sourceDigest doc))
             size = BS.length page
         if size > configMaxBytes config
             then failed [input ++ ": " ++ oversize size doc]

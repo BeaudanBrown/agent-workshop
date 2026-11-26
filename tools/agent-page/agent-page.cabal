@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          agent-page
-version:       0.2.0
+version:       0.3.0
 synopsis:      Build self-contained HTML pages that present media and ask questions
 build-type:    Simple
 

@@ -13,9 +13,13 @@ data URIs and tabs switch with CSS, so they render in the DSH sidebar's static
 HTML preview as well as in a browser. Media is re-encoded with ffmpeg (H.264
 MP4 video, WebP images) and cached beside the pages.
 
+Text can include bulleted lists, code and diff blocks and CSV tables.
+
 Pages with questions (`::: choice`, `::: multi`, `::: text`) or `reply: on`
-carry one inline script. It collects what the reader enters into reply text
-that marks each answer with its source line, and copies it to the clipboard.
+carry one inline script. It collects what the reader enters, including
+OK/Change/Question verdicts on media, into reply text that marks each answer
+with its source line and fingerprints the source, and copies it to the
+clipboard.
 If the copy is blocked, it leaves the text selected for Ctrl/Cmd+C instead.
 Nothing is stored, and previews that strip scripts show a notice to open the
 page in a browser.
@@ -38,7 +42,7 @@ The parser accepts only the documented grammar. A new feature is a new
 directive name in `Workshop.AgentPage.Parse.containerDirectives` plus its
 rendering in `Workshop.AgentPage.Render`; the syntax itself does not change.
 The reply text format is produced by the script in `Workshop.AgentPage.Render`
-and announced as `format 2`. Change the format version when it changes, and
+and announced as `format 3`. Change the format version when it changes, and
 update the skill's description of replies.
 
 - `cabal test agent-page-test` runs the parser, golden and ffmpeg tests from
