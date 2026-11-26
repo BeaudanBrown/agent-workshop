@@ -1,0 +1,4 @@
+{ wrapTool }:
+wrapTool {
+  name = "abrec";
+}

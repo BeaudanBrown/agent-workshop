@@ -68,6 +68,7 @@
             bw = pkgs.bitwarden-cli;
             inherit (sec-tools-nixpkgs.legacyPackages.${system}) secretspec;
           };
+          abrec = pkgs.callPackage ./tools/abrec/package.nix { inherit wrapTool; };
           skills = pkgs.linkFarm "agent-workshop-skills" (
             lib.mapAttrsToList (
               name: path:
@@ -92,7 +93,12 @@
         {
           formatting = formatting.${system}.config.build.check self;
           # Building a tool runs its test suite.
-          inherit (packages) check-index agent-page sec;
+          inherit (packages)
+            check-index
+            agent-page
+            sec
+            abrec
+            ;
           cabal-nix =
             pkgs.runCommand "cabal-nix-current"
               {

@@ -1,0 +1,51 @@
+cabal-version: 3.0
+name:          abrec
+version:       0.1.0
+synopsis:      Record read-aloud books and publish them as private podcast feeds
+build-type:    Simple
+
+common shared
+  default-language: GHC2021
+  ghc-options:      -Wall -Werror
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules:
+    Workshop.Abrec.Library
+    Workshop.Abrec.Main
+
+  build-depends:
+    , aeson
+    , base               >=4.18 && <5
+    , base16-bytestring
+    , bytestring
+    , cryptohash-sha256
+    , directory
+    , filepath
+    , text
+    , time
+    , unix
+
+executable abrec
+  import:         shared
+  hs-source-dirs: app
+  main-is:        Main.hs
+  build-depends:
+    , abrec
+    , base
+
+test-suite abrec-test
+  import:         shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:
+    , abrec
+    , base
+    , directory
+    , filepath
+    , temporary
+    , text
+    , time
+    , workshop-test

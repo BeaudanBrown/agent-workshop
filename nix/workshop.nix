@@ -14,6 +14,7 @@ let
     check-index = ../tools/check-index;
     agent-page = ../tools/agent-page;
     sec = ../tools/sec;
+    abrec = ../tools/abrec;
   };
 
   ffmpeg = lib.getExe' pkgs.ffmpeg-headless "ffmpeg";
