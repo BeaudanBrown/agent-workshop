@@ -2,18 +2,26 @@
 
 module Main (main) where
 
-import Data.Either (isLeft)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import Control.Monad (forM_)
+import Data.Either (isLeft, isRight)
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Time (UTCTime (..), fromGregorian)
-import System.Directory (doesFileExist, getModificationTime, getPermissions, listDirectory, setOwnerExecutable, setPermissions)
+import System.Directory (copyFile, doesDirectoryExist, doesFileExist, getModificationTime, getPermissions, getSymbolicLinkTarget, listDirectory, setOwnerExecutable, setPermissions)
 import System.Environment (getEnv, setEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (callProcess, readProcess)
+import Workshop.Abrec.Feed
 import Workshop.Abrec.Library
 import Workshop.Abrec.Media
+import Workshop.Abrec.Publisher
+import Workshop.Abrec.Site
 import Workshop.Test (assert, equal)
 
 main :: IO ()
@@ -23,6 +31,9 @@ main = do
     libraryTests
     trimTests
     mediaTests
+    feedTests
+    publisherTests
+    siteTests
 
 -- Derived values -------------------------------------------------------
 
@@ -227,3 +238,144 @@ probe tools entries path = lines <$> readProcess (toolFfprobe tools) (["-v", "er
 
 near :: String -> Double -> Double -> IO ()
 near label expected actual = assert (abs (expected - actual) < 0.3) (label ++ ": expected about " ++ show expected ++ ", got " ++ show actual)
+
+-- Feeds ----------------------------------------------------------------
+
+feedTests :: IO ()
+feedTests = do
+    putStrLn "abrec: feeds"
+    let published = UTCTime (fromGregorian 2026 11 26) 60
+        sampleItem = Item "1. Fish & <Chips>" "guid" "https://x/1.mp3" 100 61 published 1 (Just 2) Nothing
+        feed = renderFeed (Channel "Books" "https://x/" "About" (Just "Me") "https://x/a.jpg" [sampleItem])
+    contains "escaped title" "<title>1. Fish &amp; &lt;Chips&gt;</title>" feed
+    contains "serial" "<itunes:type>serial</itunes:type>" feed
+    contains "unlisted" "<itunes:block>Yes</itunes:block>" feed
+    contains "season" "<itunes:season>2</itunes:season>" feed
+    contains "date" "<pubDate>Thu, 26 Nov 2026 00:01:00 +0000</pubDate>" feed
+    contains "enclosure" "<enclosure url=\"https://x/1.mp3\" length=\"100\" type=\"audio/mpeg\"/>" feed
+
+-- Publishing -----------------------------------------------------------
+
+publisherTests :: IO ()
+publisherTests = do
+    putStrLn "abrec: publisher"
+    count <- newIORef (0 :: Int)
+    gate <- newEmptyMVar
+    publisher <- startPublisher (modifyIORef' count (+ 1) >> takeMVar gate >> pure (Right ()))
+    requestPublish publisher
+    waitFor publisher (== Publishing)
+    mapM_ (const (requestPublish publisher)) [1 .. 3 :: Int]
+    putMVar gate ()
+    putMVar gate ()
+    awaitIdle publisher
+    renders <- readIORef count
+    equal "requests during a render cause exactly one more" 2 renders
+    final <- publishState publisher
+    assert (isPublished final) "the last render succeeded"
+    failing <- startPublisher (pure (Left "boom"))
+    requestPublish failing
+    awaitIdle failing
+    failed <- publishState failing
+    assert (isFailedWith "boom" failed) "a failed render is reported"
+  where
+    isPublished (Published _) = True
+    isPublished _ = False
+    isFailedWith message (PublishFailed _ err) = err == message
+    isFailedWith _ _ = False
+
+waitFor :: Publisher -> (PublishState -> Bool) -> IO ()
+waitFor publisher wanted = go (2000 :: Int)
+  where
+    go 0 = fail "publisher state never matched"
+    go n = do
+        current <- publishState publisher
+        if wanted current then pure () else threadDelay 1000 >> go (n - 1)
+
+-- Site -----------------------------------------------------------------
+
+siteTests :: IO ()
+siteTests = withSystemTempDirectory "abrec-site" $ \root -> do
+    putStrLn "abrec: site"
+    tools <- loadTools
+    store <- openStore (root </> "library")
+    let ffmpeg arguments = callProcess (toolFfmpeg tools) (["-hide_banner", "-loglevel", "error", "-y"] ++ arguments)
+        tone frequency path = ffmpeg ["-f", "lavfi", "-i", "sine=frequency=" ++ show (frequency :: Int) ++ ":sample_rate=48000:duration=2", path]
+        publicUrl = "https://audiobooks.example.com"
+        stageAudio source = do
+            copyFile source (root </> "library" </> "tmp" </> "take.wav")
+            stageFile store (root </> "library" </> "tmp" </> "take.wav") "take.wav" 2
+    tone 440 (root </> "a.wav")
+    tone 550 (root </> "b.wav")
+
+    hobbit <- expectRight =<< createBook store (NewBook "The Hobbit" (Just "J. R. R. Tolkien") Nothing)
+    piranesi <- expectRight =<< createBook store (NewBook "Piranesi" Nothing Nothing)
+    one <- expectRight =<< addChapter store hobbit (ChapterFields 1 (Just "An Unexpected Party") Nothing) False =<< stageAudio (root </> "a.wav")
+    two <- expectRight =<< addChapter store hobbit (ChapterFields 2 Nothing Nothing) False =<< stageAudio (root </> "b.wav")
+    expectRight =<< setChapterHidden store hobbit two True
+    _ <- expectRight =<< addChapter store piranesi (ChapterFields 1 Nothing Nothing) False =<< stageAudio (root </> "a.wav")
+    expectRight =<< setBookHidden store piranesi True
+
+    expectRight =<< renderSite tools store publicUrl
+    secret <- readSecret store
+    let site = root </> "library" </> "site" </> T.unpack secret
+        base = publicUrl <> "/" <> secret <> "/"
+    forM_ ["index.html", "feed.xml", "style.css", "the-hobbit/index.html", "the-hobbit/feed.xml"] $ \path -> do
+        present <- doesFileExist (site </> path)
+        assert present ("site has " ++ path)
+    hiddenBook <- doesDirectoryExist (site </> "piranesi")
+    assert (not hiddenBook) "hidden books are not published"
+
+    bookFeed <- TIO.readFile (site </> "the-hobbit" </> "feed.xml")
+    contains "episode title" "<title>1. An Unexpected Party</title>" bookFeed
+    contains "absolute enclosure" (base <> "the-hobbit/001-") bookFeed
+    contains "book artwork" ("<itunes:image href=\"" <> base <> "the-hobbit/card-") bookFeed
+    assert (not ("<itunes:episode>2</itunes:episode>" `T.isInfixOf` bookFeed)) "hidden chapters are not published"
+    libraryFeed <- TIO.readFile (site </> "feed.xml")
+    contains "library item title" "<title>The Hobbit · 1. An Unexpected Party</title>" libraryFeed
+    contains "library season" "<itunes:season>1</itunes:season>" libraryFeed
+    index <- TIO.readFile (site </> "index.html")
+    contains "noindex" "noindex" index
+    assert (not ("Piranesi" `T.isInfixOf` index)) "hidden books are not listed"
+    bookIndex <- TIO.readFile (site </> "the-hobbit" </> "index.html")
+    contains "podcast link" ("podcast://audiobooks.example.com/" <> secret <> "/the-hobbit/feed.xml") bookIndex
+    audio <- filter (\name -> ".mp3" `T.isSuffixOf` T.pack name) <$> listDirectory (site </> "the-hobbit")
+    equal "one published chapter" 1 (length audio)
+
+    cacheBefore <- listDirectory (root </> "library" </> "cache")
+    expectRight =<< renderSite tools store publicUrl
+    expectRight =<< renderSite tools store publicUrl
+    cacheAfter <- listDirectory (root </> "library" </> "cache")
+    equal "unchanged chapters are not re-encoded" (length cacheBefore) (length cacheAfter)
+    releases <- listDirectory (root </> "library" </> "releases")
+    equal "current and previous releases are kept" 2 (length releases)
+
+    _ <- expectRight =<< addChapter store hobbit (ChapterFields 1 Nothing Nothing) True =<< stageAudio (root </> "b.wav")
+    expectRight =<< renderSite tools store publicUrl
+    replacedFeed <- TIO.readFile (site </> "the-hobbit" </> "feed.xml")
+    assert (bookFeed /= replacedFeed && ("abrec:the-hobbit:" <> one) `T.isInfixOf` replacedFeed) "a replaced chapter gets a new GUID"
+    assert (not (guidOf one bookFeed `T.isInfixOf` replacedFeed)) "the old GUID is gone"
+
+    current <- getSymbolicLinkTarget (root </> "library" </> "site")
+    writeFile (root </> "library" </> "tmp" </> "broken.wav") "not audio"
+    broken <- stageFile store (root </> "library" </> "tmp" </> "broken.wav") "broken.wav" 2
+    _ <- expectRight =<< addChapter store hobbit (ChapterFields 3 Nothing Nothing) False broken
+    failed <- renderSite tools store publicUrl
+    assert (isLeft failed) "an unreadable master fails the render"
+    unchanged <- getSymbolicLinkTarget (root </> "library" </> "site")
+    equal "a failed render keeps the current site" current unchanged
+    partials <- filter (\name -> ".partial" `T.isSuffixOf` T.pack name) <$> listDirectory (root </> "library" </> "releases")
+    equal "a failed render leaves no partial release" [] partials
+
+    chapters <- maybe [] entryChapters . (`findEntry` hobbit) <$> loadLibrary store
+    forM_ [chapter | chapter <- chapters, chapterNumber chapter == 3] $ \chapter -> expectRight =<< deleteChapter store hobbit (chapterId chapter)
+    rotateSecret store
+    rotated <- renderSite tools store publicUrl
+    assert (isRight rotated) "renders again after removing the broken chapter"
+    oldSecret <- doesDirectoryExist (root </> "library" </> "site" </> T.unpack secret)
+    assert (not oldSecret) "rotating the secret retires old URLs"
+  where
+    guidOf ident feed = case T.breakOn ("abrec:the-hobbit:" <> ident) feed of
+        (_, rest) -> T.takeWhile (/= '<') rest
+
+contains :: String -> Text -> Text -> IO ()
+contains label needle haystack = assert (needle `T.isInfixOf` haystack) (label ++ ": missing " ++ T.unpack needle)

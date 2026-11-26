@@ -3,16 +3,20 @@
   aeson,
   base,
   base16-bytestring,
+  blaze-html,
   bytestring,
   containers,
   cryptohash-sha256,
   directory,
   filepath,
+  ihp-hsx,
   lib,
   process,
+  stm,
   temporary,
   text,
   time,
+  transformers,
   unix,
   workshop-cli,
   workshop-test,
@@ -27,14 +31,18 @@ mkDerivation {
     aeson
     base
     base16-bytestring
+    blaze-html
     bytestring
     containers
     cryptohash-sha256
     directory
     filepath
+    ihp-hsx
     process
+    stm
     text
     time
+    transformers
     unix
     workshop-cli
   ];

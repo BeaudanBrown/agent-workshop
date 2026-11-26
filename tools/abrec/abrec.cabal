@@ -12,22 +12,30 @@ library
   import:          shared
   hs-source-dirs:  src
   exposed-modules:
+    Workshop.Abrec.Config
+    Workshop.Abrec.Feed
     Workshop.Abrec.Library
     Workshop.Abrec.Main
     Workshop.Abrec.Media
+    Workshop.Abrec.Publisher
+    Workshop.Abrec.Site
 
   build-depends:
     , aeson
     , base               >=4.18 && <5
     , base16-bytestring
+    , blaze-html
     , bytestring
     , containers
     , cryptohash-sha256
     , directory
     , filepath
+    , ihp-hsx
     , process
+    , stm
     , text
     , time
+    , transformers
     , unix
     , workshop-cli
 
