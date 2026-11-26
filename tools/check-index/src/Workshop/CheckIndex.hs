@@ -1,4 +1,5 @@
-module Main (main) where
+-- | Validate the staged Git snapshot with nix flake check.
+module Workshop.CheckIndex (main) where
 
 import System.FilePath (addTrailingPathSeparator)
 import System.IO.Temp (withSystemTempDirectory)

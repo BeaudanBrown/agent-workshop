@@ -11,6 +11,7 @@ let
   packageDirs = {
     workshop-cli = ../lib/workshop-cli;
     workshop-test = ../lib/workshop-test;
+    check-index = ../tools/check-index;
     media-page = ../tools/media-page;
     sec = ../tools/sec;
   };

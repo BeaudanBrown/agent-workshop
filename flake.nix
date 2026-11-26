@@ -58,14 +58,7 @@
           inherit (workshop.${system}) wrapTool;
         in
         {
-          check-index = pkgs.stdenv.mkDerivation {
-            pname = "check-index";
-            version = "0.1";
-            src = ./tools/check-index;
-            nativeBuildInputs = [ (pkgs.ghc.withPackages (p: [ p.temporary ])) ];
-            buildPhase = "ghc -Wall -Werror Main.hs -o check-index";
-            installPhase = "install -Dm755 check-index $out/bin/check-index";
-          };
+          check-index = pkgs.callPackage ./tools/check-index/package.nix { inherit wrapTool; };
           media-page = pkgs.callPackage ./tools/media-page/package.nix { inherit wrapTool; };
           sec = pkgs.callPackage ./tools/sec/package.nix {
             inherit wrapTool;

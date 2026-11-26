@@ -1,0 +1,27 @@
+cabal-version: 3.0
+name:          check-index
+version:       0.1.0
+synopsis:      Validate the staged Git snapshot with nix flake check
+build-type:    Simple
+
+common shared
+  default-language: GHC2021
+  ghc-options:      -Wall -Werror
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules: Workshop.CheckIndex
+  build-depends:
+    , base       >=4.18 && <5
+    , filepath
+    , process
+    , temporary
+
+executable check-index
+  import:         shared
+  hs-source-dirs: app
+  main-is:        Main.hs
+  build-depends:
+    , base
+    , check-index
