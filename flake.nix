@@ -34,7 +34,11 @@
         system: treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} ./treefmt.nix
       );
       workshop = forEachSystem (
-        system: import ./nix/workshop.nix { pkgs = nixpkgs.legacyPackages.${system}; }
+        system:
+        import ./nix/workshop.nix {
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit (sec-tools-nixpkgs.legacyPackages.${system}) secretspec;
+        }
       );
       upstreamSkills = {
         domain-modeling = "${matt-pocock-skills}/skills/engineering/domain-modeling";
@@ -64,6 +68,7 @@
           };
           media-page = pkgs.callPackage ./tools/media-page/package.nix { inherit wrapTool; };
           sec = pkgs.callPackage ./tools/sec/package.nix {
+            inherit wrapTool;
             bw = pkgs.bitwarden-cli;
             inherit (sec-tools-nixpkgs.legacyPackages.${system}) secretspec;
           };
@@ -91,24 +96,7 @@
         {
           formatting = formatting.${system}.config.build.check self;
           # Building a tool runs its test suite.
-          inherit (packages) check-index media-page;
-          sec =
-            pkgs.runCommand "sec-tests"
-              {
-                nativeBuildInputs = [
-                  (pkgs.ghc.withPackages (p: [ p.temporary ]))
-                  pkgs.git
-                  pkgs.util-linux
-                ];
-              }
-              ''
-                cp ${./tools/sec/test/Main.hs} Main.hs
-                ghc -Wall -Werror Main.hs -o sec-tests
-                LC_ALL=C.UTF-8 SEC_TEST_SHELL=${pkgs.runtimeShell} ./sec-tests ${packages.sec}/libexec/sec ${
-                  sec-tools-nixpkgs.legacyPackages.${system}.secretspec
-                }/bin/secretspec
-                touch "$out"
-              '';
+          inherit (packages) check-index media-page sec;
           cabal-nix =
             pkgs.runCommand "cabal-nix-current"
               {

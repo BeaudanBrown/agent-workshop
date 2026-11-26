@@ -1,21 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main (main) where
+module Workshop.Sec (main) where
 
 import Control.Exception (IOException, evaluate, handle)
 import Control.Monad (unless, when)
 import Data.Aeson (FromJSON (parseJSON), eitherDecodeStrict', withObject, (.:), (.:?))
 import Data.Char (isAlpha, isAlphaNum, isAscii, isSpace, toLower)
 import Data.List (dropWhileEnd, intercalate, isPrefixOf, nub, stripPrefix)
-import qualified Data.Text as Text
+import Data.Text qualified as Text
 import Data.Text.Encoding (encodeUtf8)
 import System.Directory (doesFileExist, doesPathExist, getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (ExitSuccess), die, exitWith)
-import System.FilePath (isAbsolute, takeDirectory, takeFileName, (</>))
-import System.IO (hFlush, hGetContents, hIsEOF, hIsTerminalDevice, hPutStr, hPutStrLn, stderr, stdin)
+import System.FilePath (takeDirectory, (</>))
+import System.IO (hFlush, hGetContents, hIsTerminalDevice, hPutStr, hPutStrLn, isEOF, stderr, stdin)
 import System.Posix.Process (executeFile)
 import System.Process (CreateProcess (..), StdStream (..), proc, readCreateProcessWithExitCode, waitForProcess, withCreateProcess)
+import Workshop.Cli.Env qualified as Env
 
 data VaultState = SignedOut | Locked | Unlocked deriving (Eq)
 
@@ -134,11 +135,7 @@ locateManifest dir = do
                 else locateManifest parent
 
 configuredExecutable :: String -> FilePath -> IO FilePath
-configuredExecutable variable basename = do
-    value <- lookupEnv variable
-    case value of
-        Just path | isAbsolute path && takeFileName path == basename -> pure path
-        _ -> die ("sec: configure " ++ variable ++ " with an absolute path to " ++ basename ++ ".")
+configuredExecutable = Env.configuredExecutable "sec"
 
 validateServer :: String -> IO String
 validateServer url =
@@ -170,7 +167,7 @@ approveLogin :: IO ()
 approveLogin = do
     hPutStr stderr "Bitwarden is signed out. Run bw login now? [y/N] "
     hFlush stderr
-    eof <- hIsEOF stdin
+    eof <- isEOF
     answer <- if eof then pure "" else getLine
     unless (map toLower (trim answer) `elem` ["y", "yes"]) $ die "sec: Bitwarden login declined."
 

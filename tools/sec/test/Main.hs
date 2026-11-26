@@ -19,6 +19,7 @@ import System.IO (readFile')
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (CreateProcess (cwd, env), proc, readCreateProcessWithExitCode)
 import System.Timeout (timeout)
+import Workshop.Test (assert, equal)
 
 data Tools = Tools
     { sec :: FilePath
@@ -56,7 +57,7 @@ main :: IO ()
 main = do
     args <- getArgs
     (secPath, realSecretspec) <- case args of
-        [path] -> (\resolved -> (resolved, Nothing)) <$> canonicalizePath path
+        [path] -> (,Nothing) <$> canonicalizePath path
         [path, real] -> (,) <$> canonicalizePath path <*> (Just <$> canonicalizePath real)
         _ -> die "usage: sec-test /path/to/compiled/sec [/path/to/real/secretspec]"
     testShell <- lookupEnv "SEC_TEST_SHELL" >>= maybe (requireProgram "sh") pure
@@ -346,10 +347,3 @@ nulFields = concatMap (++ "\NUL")
 expectOutput :: Result -> String -> IO ()
 expectOutput result part =
     assert (part `isInfixOf` output result) ("expected output containing " ++ show part ++ "; got " ++ show (output result))
-
-equal :: (Eq a, Show a) => String -> a -> a -> IO ()
-equal label expected actual =
-    assert (expected == actual) (label ++ ": expected " ++ show expected ++ ", got " ++ show actual)
-
-assert :: Bool -> String -> IO ()
-assert condition message = unless condition (die message)

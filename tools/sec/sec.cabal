@@ -1,0 +1,46 @@
+cabal-version: 3.0
+name:          sec
+version:       0.1.0
+synopsis:      Run a project command with SecretSpec values from Bitwarden
+build-type:    Simple
+
+common shared
+  default-language: GHC2021
+  ghc-options:      -Wall -Werror
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules: Workshop.Sec
+  build-depends:
+    , aeson
+    , base          >=4.18 && <5
+    , directory
+    , filepath
+    , process
+    , text
+    , unix
+    , workshop-cli
+
+executable sec
+  import:         shared
+  hs-source-dirs: app
+  main-is:        Main.hs
+  build-depends:
+    , base
+    , sec
+
+-- Exercises the compiled executable against fake bw and SecretSpec programs.
+-- Arguments: the sec executable, then optionally a real secretspec.
+test-suite sec-test
+  import:         shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:
+    , base
+    , directory
+    , filepath
+    , process
+    , temporary
+    , workshop-test

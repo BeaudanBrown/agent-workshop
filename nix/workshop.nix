@@ -3,7 +3,7 @@
 # Each package directory holds a cabal2nix-generated cabal.nix (kept current by
 # checks.cabal-nix). A tool's package.nix calls wrapTool, which hands each
 # runtime program to the tool through an environment variable.
-{ pkgs }:
+{ pkgs, secretspec }:
 let
   inherit (pkgs) lib;
   hlib = pkgs.haskell.lib.compose;
@@ -12,6 +12,7 @@ let
     workshop-cli = ../lib/workshop-cli;
     workshop-test = ../lib/workshop-test;
     media-page = ../tools/media-page;
+    sec = ../tools/sec;
   };
 
   ffmpeg = lib.getExe' pkgs.ffmpeg-headless "ffmpeg";
@@ -23,6 +24,19 @@ let
       preCheck = (drv.preCheck or "") + ''
         export MEDIA_PAGE_FFMPEG=${ffmpeg} MEDIA_PAGE_FFPROBE=${ffprobe}
       '';
+    });
+    sec = hlib.overrideCabal (drv: {
+      testToolDepends = (drv.testToolDepends or [ ]) ++ [
+        pkgs.git
+        pkgs.util-linux
+      ];
+      preCheck = (drv.preCheck or "") + ''
+        export LC_ALL=C.UTF-8 SEC_TEST_SHELL=${pkgs.runtimeShell}
+      '';
+      testFlags = [
+        "dist/build/sec/sec"
+        "${secretspec}/bin/secretspec"
+      ];
     });
   };
 

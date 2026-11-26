@@ -2,3 +2,4 @@ packages:
   lib/workshop-cli
   lib/workshop-test
   tools/media-page
+  tools/sec
