@@ -16,11 +16,11 @@ import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Posix.Files (fileMode, getFileStatus, setFileCreationMask)
 import System.Process (readProcessWithExitCode)
-import Workshop.MediaPage.Build (Config (..), buildPage, defaultMaxBytes)
-import Workshop.MediaPage.Document
-import Workshop.MediaPage.Media (Embedded (..), Encoded (..), Tools (..))
-import Workshop.MediaPage.Parse (ParseError (..), parseDocument)
-import Workshop.MediaPage.Render (Placed (..), renderPage)
+import Workshop.AgentPage.Build (Config (..), buildPage, defaultMaxBytes)
+import Workshop.AgentPage.Document
+import Workshop.AgentPage.Media (Embedded (..), Encoded (..), Tools (..))
+import Workshop.AgentPage.Parse (ParseError (..), parseDocument)
+import Workshop.AgentPage.Render (Placed (..), renderPage)
 import Workshop.Test (assert, equal)
 
 main :: IO ()
@@ -54,9 +54,40 @@ sample =
         , ":::"
         ]
 
+questionsSample :: Text
+questionsSample =
+    T.unlines
+        [ "---"
+        , "title: Questions"
+        , "reply: on"
+        , "---"
+        , "Lead text."
+        , ""
+        , "::: choice"
+        , "Which layout?"
+        , ""
+        , "Context paragraph."
+        , "![Both layouts](both.png)"
+        , "- Compact (recommended)"
+        , "- Spacious"
+        , ":::"
+        , "# Section"
+        , "::: tabs"
+        , "## Tab"
+        , "::: multi"
+        , "Pick any"
+        , "- A"
+        , "- B"
+        , ":::"
+        , ":::"
+        , "::: text"
+        , "Anything else?"
+        , ":::"
+        ]
+
 parserTests :: IO ()
 parserTests = do
-    putStrLn "media-page: parser"
+    putStrLn "agent-page: parser"
     equal
         "sample document"
         ( Right
@@ -64,14 +95,47 @@ parserTests = do
                 "Demo page"
                 (Just "Synthetic fixture")
                 (Just "2026-11-26")
-                [ Section "First section" [Paragraph "Plain text that continues here.", Media (MediaRef "A synthetic clip" "clip.webm" 10)]
+                False
+                [ Section (Just "First section") 6 [Paragraph "Plain text that continues here.", Media (MediaRef "A synthetic clip" "clip.webm" 10)]
                 , Section
-                    "Second section"
+                    (Just "Second section")
+                    12
                     [Tabs [Tab "One" [Media (MediaRef "First still" "one.png" 15)], Tab "Two" [Paragraph "Second panel text."]]]
                 ]
             )
         )
         (parseDocument sample)
+    equal
+        "questions document"
+        ( Right
+            ( Document
+                "Questions"
+                Nothing
+                Nothing
+                True
+                [ Section
+                    Nothing
+                    5
+                    [ Paragraph "Lead text."
+                    , Ask
+                        ( Question
+                            SingleChoice
+                            8
+                            "Which layout?"
+                            [Paragraph "Context paragraph.", Media (MediaRef "Both layouts" "both.png" 11)]
+                            [Choice "Compact" True, Choice "Spacious" False]
+                        )
+                    ]
+                , Section
+                    (Just "Section")
+                    15
+                    [ Tabs [Tab "Tab" [Ask (Question MultipleChoice 19 "Pick any" [] [Choice "A" False, Choice "B" False])]]
+                    , Ask (Question FreeText 25 "Anything else?" [] [])
+                    ]
+                ]
+            )
+        )
+        (parseDocument questionsSample)
     forM_ rejections $ \(source, expected) -> case parseDocument source of
         Right _ -> die ("accepted invalid source: " ++ show source)
         Left errs -> do
@@ -95,12 +159,27 @@ rejections =
     , (withHeader ["# S", "::: grid", ":::"], [(5, "unknown container 'grid'")])
     , (withHeader ["# S", "::: tabs", "![c](a.png)", ":::"], [(5, "needs at least one"), (6, "start each tab")])
     , (withHeader ["# S", "## Heading"], [(5, "only used for tab labels")])
-    , (withHeader ["Text first"], [(4, "must follow a '# Section'")])
     , (withHeader ["# S", "```csv"], [(5, "fenced blocks")])
     , (withHeader ["# S", "::: tabs", "## A", ":::"], [(6, "has no content")])
     , (withHeader ["# S", "::: tabs", "## A", "x", "::: tabs"], [(5, "never closed"), (8, "cannot be nested")])
     , (withHeader ["# S", "- a", "**b**"], [(5, "lists"), (6, "bold")])
-    , (withHeader [], [(3, "at least one '# Section'")])
+    , (withHeader [], [(3, "add some content")])
+    , (withHeader ["::: choice", "- a", "- b", ":::"], [(4, "needs its question"), (5, "before its options"), (6, "before its options")])
+    , (withHeader ["::: choice", "Q?", "- only", ":::"], [(4, "at least two")])
+    , (withHeader ["::: text", "Q?", "- a", ":::"], [(6, "take no options")])
+    , (withHeader ["::: choice", "Q?", "- a", "- b", "More text", ":::"], [(8, "options come last")])
+    , (withHeader ["::: choice", "Q?", "- a", "- a", "- b", ":::"], [(7, "listed twice")])
+    , (withHeader ["::: choice", "Q?", "- a (recommended)", "- b (Recommended)", ":::"], [(4, "recommend only one")])
+    , (withHeader ["::: choice", "Q?", "::: tabs", ":::"], [(4, "at least two"), (6, "cannot contain containers")])
+    , (withHeader ["::: choice", "Q?", "## T", "- a", "- b", ":::"], [(6, "'##' tab labels cannot go inside '::: choice'")])
+    , (withHeader ["::: choice", "Q?", "- a", "- b"], [(4, "'::: choice' is never closed")])
+    , (withHeader ["::: choice", "Q?", "- a", "- b", "# S"], [(8, "close '::: choice' with ':::'")])
+    , (withHeader ["::: choice", "Q?", "* a", "- b", ":::"], [(4, "at least two"), (6, "write each option as '- label'")])
+    , (withHeader ["::: choice", "Q?", "- See [x](y)", "- b", ":::"], [(4, "at least two"), (6, "links are not supported")])
+    , (withHeader ["::: choice", "![c](a.png)", "Q?", "- a", "- b", ":::"], [(5, "start the question with its text")])
+    , (withHeader ["::: multi now", "Q?", "- a", "- b", ":::"], [(4, "'multi' takes no options")])
+    , (withHeader ["::: choice", "Q?", "-", "- b", ":::"], [(4, "at least two"), (6, "an option needs text")])
+    , (T.unlines ["---", "title: T", "reply: yes", "---", "x"], [(3, "'reply' is 'on' or 'off'")])
     , (T.unlines ["# S", "text"], [(1, "start the file with a '---' header")])
     , (T.unlines ["---", "meta: m", "---", "# S"], [(1, "needs 'title")])
     , (T.unlines ["---", "title: T", "colour: red", "---", "# S"], [(3, "unknown header key 'colour'")])
@@ -110,17 +189,17 @@ rejections =
 
 goldenTests :: IO ()
 goldenTests = do
-    putStrLn "media-page: golden rendering"
-    update <- (== Just "1") <$> lookupEnv "MEDIA_PAGE_UPDATE_GOLDEN"
+    putStrLn "agent-page: golden rendering"
+    update <- (== Just "1") <$> lookupEnv "AGENT_PAGE_UPDATE_GOLDEN"
     forM_ goldens $ \(name, doc) -> do
         let path = "test" </> "golden" </> name
-            actual = BL.toStrict (toLazyByteString (renderPage "media-page test · format 1" doc))
+            actual = BL.toStrict (toLazyByteString (renderPage "agent-page test · format 2" "/work/notes/page.md" doc))
         if update
             then BS.writeFile path actual
             else do
                 expected <- BS.readFile path
                 unless (expected == actual) $
-                    die (path ++ " differs from the rendered page; rerun with MEDIA_PAGE_UPDATE_GOLDEN=1 after an intended change")
+                    die (path ++ " differs from the rendered page; rerun with AGENT_PAGE_UPDATE_GOLDEN=1 after an intended change")
 
 goldens :: [(FilePath, Document Placed)]
 goldens =
@@ -130,12 +209,14 @@ goldens =
             "Escaping <&> \"quotes\" and 'apostrophes'"
             (Just "Synthetic fixture")
             (Just "2026-11-26")
+            False
             [ Section
-                "Media"
+                (Just "Media")
+                5
                 [ Paragraph "A paragraph with <tags> & ampersands."
-                , Media (Placed "A still image" (fake EmbeddedImage "image/webp" 640 360))
-                , Media (Placed "A clip" (fake (EmbeddedVideo False) "video/mp4" 1280 800))
-                , Media (Placed "A looping animation" (fake (EmbeddedVideo True) "video/mp4" 320 240))
+                , Media (Placed "A still image" 7 (fake EmbeddedImage "image/webp" 640 360))
+                , Media (Placed "A clip" 8 (fake (EmbeddedVideo False) "video/mp4" 1280 800))
+                , Media (Placed "A looping animation" 9 (fake (EmbeddedVideo True) "video/mp4" 320 240))
                 ]
             ]
         )
@@ -145,8 +226,41 @@ goldens =
             "Tabs"
             Nothing
             Nothing
-            [ Section "Two tabs" [Tabs [Tab "One" [Paragraph "First."], Tab "Two" [Media (Placed "Second" (fake EmbeddedImage "image/webp" 10 10))]]]
-            , Section "Three tabs" [Tabs [Tab "A" [Paragraph "a"], Tab "B" [Paragraph "b"], Tab "C" [Paragraph "c"]]]
+            False
+            [ Section (Just "Two tabs") 4 [Tabs [Tab "One" [Paragraph "First."], Tab "Two" [Media (Placed "Second" 8 (fake EmbeddedImage "image/webp" 10 10))]]]
+            , Section (Just "Three tabs") 10 [Tabs [Tab "A" [Paragraph "a"], Tab "B" [Paragraph "b"], Tab "C" [Paragraph "c"]]]
+            ]
+        )
+    ,
+        ( "questions.html"
+        , Document
+            "Review <round> 1"
+            Nothing
+            Nothing
+            True
+            [ Section
+                Nothing
+                4
+                [ Paragraph "Lead text."
+                , Ask
+                    ( Question
+                        SingleChoice
+                        7
+                        "Which \"layout\"?"
+                        [Paragraph "Context.", Media (Placed "Both layouts" 9 (fake EmbeddedImage "image/webp" 10 10))]
+                        [Choice "Compact" True, Choice "Spacious & airy" False]
+                    )
+                ]
+            , Section
+                (Just "Payroll")
+                14
+                [ Tabs
+                    [ Tab "Export" [Media (Placed "Export review" 17 (fake EmbeddedImage "image/webp" 10 10))]
+                    , Tab "Xero" [Ask (Question MultipleChoice 19 "Pick any" [] [Choice "A" False, Choice "B" False])]
+                    ]
+                , Ask (Question FreeText 25 "Anything else?" [] [])
+                , Media (Placed "A clip" 28 (fake (EmbeddedVideo False) "video/mp4" 10 10))
+                ]
             ]
         )
     ]
@@ -157,14 +271,14 @@ goldens =
 
 pipelineTests :: IO ()
 pipelineTests = do
-    putStrLn "media-page: pipeline"
-    ffmpeg <- requireEnv "MEDIA_PAGE_FFMPEG"
-    ffprobe <- requireEnv "MEDIA_PAGE_FFPROBE"
+    putStrLn "agent-page: pipeline"
+    ffmpeg <- requireEnv "AGENT_PAGE_FFMPEG"
+    ffprobe <- requireEnv "AGENT_PAGE_FFPROBE"
     let tools = Tools ffmpeg ffprobe
-    withSystemTempDirectory "media-page-test" $ \tmp -> do
+    withSystemTempDirectory "agent-page-test" $ \tmp -> do
         let media = tmp </> "media"
             out = tmp </> "pages"
-            config = Config tools out defaultMaxBytes Nothing "media-page test · format 1"
+            config = Config tools out defaultMaxBytes Nothing "agent-page test · format 2"
             generate name arguments = run ffmpeg (["-v", "error", "-y"] ++ arguments ++ [media </> name])
         run "mkdir" ["-p", media]
         generate "clip.mp4" ["-f", "lavfi", "-i", "testsrc2=size=1600x900:rate=30:duration=2", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:v", "libx264", "-c:a", "aac", "-shortest"]
@@ -254,7 +368,7 @@ count needle haystack = length (filter (needle `isPrefixOf`) (tailsOf haystack))
         _ : rest -> text : tailsOf rest
 
 requireEnv :: String -> IO String
-requireEnv name = lookupEnv name >>= maybe (die ("media-page tests need " ++ name)) pure
+requireEnv name = lookupEnv name >>= maybe (die ("agent-page tests need " ++ name)) pure
 
 run :: FilePath -> [String] -> IO ()
 run program arguments = do

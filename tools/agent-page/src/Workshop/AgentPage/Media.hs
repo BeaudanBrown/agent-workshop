@@ -6,7 +6,7 @@ Each preset has an identifier that is part of its cache key; changing a
 preset's arguments requires a new identifier so stale cache entries are never
 reused.
 -}
-module Workshop.MediaPage.Media (
+module Workshop.AgentPage.Media (
     Tools (..),
     SourceKind (..),
     Encoded (..),

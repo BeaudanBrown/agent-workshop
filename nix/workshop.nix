@@ -12,7 +12,7 @@ let
     workshop-cli = ../lib/workshop-cli;
     workshop-test = ../lib/workshop-test;
     check-index = ../tools/check-index;
-    media-page = ../tools/media-page;
+    agent-page = ../tools/agent-page;
     sec = ../tools/sec;
   };
 
@@ -21,9 +21,9 @@ let
 
   # Programs and arguments a test suite needs beyond its Haskell dependencies.
   testSetup = {
-    media-page = hlib.overrideCabal (drv: {
+    agent-page = hlib.overrideCabal (drv: {
       preCheck = (drv.preCheck or "") + ''
-        export MEDIA_PAGE_FFMPEG=${ffmpeg} MEDIA_PAGE_FFPROBE=${ffprobe}
+        export AGENT_PAGE_FFMPEG=${ffmpeg} AGENT_PAGE_FFPROBE=${ffprobe}
       '';
     });
     sec = hlib.overrideCabal (drv: {

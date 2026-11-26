@@ -1,9 +1,9 @@
-# Builds a page with the packaged tool and renders it in Chromium the way the
-# DSH sidebar previews HTML; see render-check.py.
+# Builds a media page and a question page with the packaged tool and renders
+# them in Chromium the way the DSH sidebar previews HTML; see render-check.py.
 {
   pkgs,
   ffmpeg,
-  media-page,
+  agent-page,
 }:
 let
   # The DOMPurify release DSH 0.2.2 bundles for its static HTML preview.
@@ -13,18 +13,18 @@ let
   };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
 in
-pkgs.runCommand "media-page-render"
+pkgs.runCommand "agent-page-render"
   {
     nativeBuildInputs = [
       python
-      media-page
+      agent-page
     ];
     PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
     # The build sandbox has no fonts; without one, text lays out with no size.
     FONTCONFIG_FILE = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
   }
   ''
-    export HOME=$TMPDIR MEDIA_PAGE_OUT_DIR=$TMPDIR/pages
+    export HOME=$TMPDIR AGENT_PAGE_OUT_DIR=$TMPDIR/pages
     mkdir media && cd media
     ${ffmpeg} -v error -f lavfi -i testsrc2=size=1280x720:rate=30:duration=2 -c:v libx264 clip.mp4
     ${ffmpeg} -v error -f lavfi -i testsrc2=size=800x450 -frames:v 1 still.png
@@ -47,6 +47,43 @@ pkgs.runCommand "media-page-render"
     Plain text in the third tab.
     :::
     EOF
-    python ${./render-check.py} "$(media-page page.md)" ${dompurify}
+    cat > ask.md <<'EOF'
+    ---
+    title: Ask check
+    reply: on
+    ---
+    Answer the questions below.
+
+    ::: choice
+    Which layout?
+
+    ![A synthetic still](still.png)
+    - Compact (recommended)
+    - Spacious
+    :::
+
+    # Payroll
+    ::: tabs
+    ## Export
+    ![Export still](still.png)
+    ## Xero
+    ::: multi
+    Which checks?
+    - Totals
+    - Names
+    :::
+    :::
+
+    ::: text
+    Anything else?
+    :::
+
+    ::: choice
+    Skip me?
+    - Yes
+    - No
+    :::
+    EOF
+    python ${./render-check.py} "$(agent-page page.md)" "$(agent-page ask.md)" "$PWD/ask.md" ${dompurify}
     touch "$out"
   ''

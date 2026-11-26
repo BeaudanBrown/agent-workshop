@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review &lt;round&gt; 1</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f5;--fg:#18201d;--muted:#5b6862;--card:#fff;--line:#d6ddd8;--accent:#1f6f5c}
+@media (prefers-color-scheme:dark){:root{--bg:#111614;--fg:#e3eae6;--muted:#9aa7a0;--card:#19201d;--line:#2d3833;--accent:#6cc4a7}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:0 auto;padding:32px 20px 8px}
+header{margin-bottom:28px}
+h1{font-size:2rem;line-height:1.2;margin:0 0 6px}
+.meta{color:var(--muted);margin:0;font-size:.95rem}
+section{margin:0 0 36px}
+h2{font-size:1.35rem;line-height:1.3;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+p{margin:0 0 14px}
+figure{margin:0 0 22px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+figure img,figure video{display:block;width:100%;height:auto}
+figure video{background:#000}
+figcaption{padding:10px 14px;color:var(--muted);font-size:.93rem}
+.tabs{margin:0 0 22px}
+.tabs>input{position:absolute;opacity:0;pointer-events:none}
+.tabs>label{display:inline-block;padding:6px 14px;margin:0 6px 12px 0;border:1px solid var(--line);border-radius:999px;cursor:pointer;color:var(--muted);background:var(--card)}
+.tabs>input:checked+label{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.tabs>input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.tabs>.panel{display:none}
+footer{max-width:960px;margin:0 auto;padding:0 20px 28px;color:var(--muted);font-size:.8rem}
+textarea,input[type=text]{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea:focus,input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
+summary{cursor:pointer;color:var(--accent);font-size:.93rem}
+details.reply{padding:0 14px 10px}
+section>details.reply{padding:0;margin:0 0 14px}
+details textarea{margin-top:8px}
+.q{margin:0 0 22px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:10px;min-width:0}
+.q>legend{float:left;width:100%;padding:0;margin:0 0 12px;font-weight:600}
+.q>legend+*{clear:both}
+.qn{display:inline-block;margin-right:6px;padding:0 8px;border-radius:999px;background:var(--accent);color:var(--bg);font-size:.85rem}
+.q figure{background:var(--bg)}
+.opts{margin:0 0 10px}
+.opt{display:flex;gap:8px;align-items:center;margin:6px 0;cursor:pointer}
+.opt input[type=text]{flex:1;padding:4px 8px}
+.rec{font-size:.75rem;padding:0 8px;border:1px solid var(--accent);border-radius:999px;color:var(--accent)}
+.overall label{display:block;font-weight:600;margin-bottom:6px}
+.overall{margin:0 0 16px}
+button{font:inherit;padding:8px 18px;border-radius:999px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+#ap-status{color:var(--muted);font-size:.93rem}
+#ap-out{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.hint,.ap-static{color:var(--muted);font-size:.93rem}
+.ap-live{display:none}
+.ap-js .ap-live{display:block}
+.ap-js .ap-static{display:none}
+.tabs>input:nth-of-type(1):checked~.panel:nth-of-type(1){display:block}
+.tabs>input:nth-of-type(2):checked~.panel:nth-of-type(2){display:block}
+</style>
+</head>
+<body>
+<main data-title="Review &lt;round&gt; 1" data-source="/work/notes/page.md">
+<header>
+<h1>Review &lt;round&gt; 1</h1>
+</header>
+<section>
+<p>Lead text.</p>
+<fieldset class="q" data-item data-q="1" data-kind="choice" data-line="7" data-text="Which &quot;layout&quot;?">
+<legend><span class="qn">Q1</span> Which &quot;layout&quot;?</legend>
+<p>Context.</p>
+<figure>
+<img src="data:image/webp;base64,QllURVM=" alt="Both layouts" width="10" height="10">
+<figcaption>Both layouts</figcaption>
+</figure>
+<div class="opts">
+<label class="opt"><input type="radio" name="q1" value="Compact"> <span>Compact</span> <span class="rec">recommended</span></label>
+<label class="opt"><input type="radio" name="q1" value="Spacious &amp; airy"> <span>Spacious &amp; airy</span></label>
+<label class="opt"><input type="radio" name="q1" class="ap-other-pick"> <span>Other</span> <input type="text" class="ap-other" aria-label="Other answer"></label>
+</div>
+<details class="note"><summary>Add a note</summary>
+<textarea class="ap-note" rows="2" aria-label="Note"></textarea>
+</details>
+</fieldset>
+</section>
+<section>
+<h2>Payroll</h2>
+<div class="tabs">
+<input type="radio" name="t1" id="t1-1" checked><label for="t1-1">Export</label>
+<input type="radio" name="t1" id="t1-2"><label for="t1-2">Xero</label>
+<div class="panel">
+<figure>
+<img src="data:image/webp;base64,QllURVM=" alt="Export review" width="10" height="10">
+<figcaption>Export review</figcaption>
+<details class="reply" data-item data-reply="image" data-line="17" data-path="Payroll › Export" data-caption="Export review"><summary>Reply</summary>
+<textarea rows="3" aria-label="Reply"></textarea>
+</details>
+</figure>
+</div>
+<div class="panel">
+<fieldset class="q" data-item data-q="2" data-kind="multi" data-line="19" data-path="Payroll › Xero" data-text="Pick any">
+<legend><span class="qn">Q2</span> Pick any</legend>
+<div class="opts">
+<label class="opt"><input type="checkbox" name="q2" value="A"> <span>A</span></label>
+<label class="opt"><input type="checkbox" name="q2" value="B"> <span>B</span></label>
+<label class="opt"><input type="checkbox" name="q2" class="ap-other-pick"> <span>Other</span> <input type="text" class="ap-other" aria-label="Other answer"></label>
+</div>
+<details class="note"><summary>Add a note</summary>
+<textarea class="ap-note" rows="2" aria-label="Note"></textarea>
+</details>
+</fieldset>
+</div>
+</div>
+<fieldset class="q" data-item data-q="3" data-kind="text" data-line="25" data-path="Payroll" data-text="Anything else?">
+<legend><span class="qn">Q3</span> Anything else?</legend>
+<textarea class="ap-answer" rows="4" aria-label="Answer"></textarea>
+</fieldset>
+<figure>
+<video controls muted playsinline preload="metadata" width="10" height="10">
+<source type="video/mp4" src="data:video/mp4;base64,QllURVM=">
+</video>
+<figcaption>A clip</figcaption>
+<details class="reply" data-item data-reply="video" data-line="28" data-path="Payroll" data-caption="A clip"><summary>Reply</summary>
+<textarea rows="3" aria-label="Reply"></textarea>
+</details>
+</figure>
+<details class="reply" data-item data-reply="section" data-line="14" data-path="Payroll"><summary>Reply to this section</summary>
+<textarea rows="3" aria-label="Reply"></textarea>
+</details>
+</section>
+<section class="respond">
+<h2>Your reply</h2>
+<div class="overall" data-item data-reply="overall"><label for="ap-overall">Overall</label>
+<textarea id="ap-overall" rows="3"></textarea></div>
+<p class="ap-static">Replying needs scripts, and this preview runs without them. Open the page in a browser to answer and copy your reply.</p>
+<div class="ap-live">
+<p><button type="button" id="ap-copy">Copy reply</button> <span id="ap-status" role="status"></span></p>
+<textarea id="ap-out" readonly rows="10" aria-label="Reply text"></textarea>
+<p class="hint">Paste the copied text into the chat. Nothing is saved: reloading the page clears it.</p>
+</div>
+</section>
+</main>
+<script>
+(function () {
+  var NL = String.fromCharCode(10);
+  var main = document.querySelector('main');
+  var out = document.getElementById('ap-out');
+  var status = document.getElementById('ap-status');
+  if (!main || !out || !status) return;
+  document.documentElement.className += ' ap-js';
+  var source = main.getAttribute('data-source');
+  var file = source.split('/').pop();
+  function value(el) { return el ? el.value.trim() : ''; }
+  function reply() {
+    var parts = [], skipped = [];
+    var items = main.querySelectorAll('[data-item]');
+    for (var i = 0; i < items.length; i++) {
+      var el = items[i], kind = el.getAttribute('data-reply');
+      var at = file + ':' + el.getAttribute('data-line') + (el.hasAttribute('data-path') ? ' · ' + el.getAttribute('data-path') : '');
+      if (el.hasAttribute('data-q')) {
+        var id = 'Q' + el.getAttribute('data-q');
+        var head = id + ' · ' + at + NL + '> ' + el.getAttribute('data-text');
+        if (el.getAttribute('data-kind') === 'text') {
+          var answer = value(el.querySelector('.ap-answer'));
+          if (answer) parts.push(head + NL + answer); else skipped.push(id);
+          continue;
+        }
+        var picks = [], inputs = el.querySelectorAll('.opts input');
+        for (var j = 0; j < inputs.length; j++) {
+          var input = inputs[j];
+          if (input.type === 'text' || !input.checked) continue;
+          if (input.className === 'ap-other-pick') {
+            var other = value(el.querySelector('.ap-other'));
+            picks.push(other ? 'Other: ' + other : 'Other');
+          } else picks.push(input.value);
+        }
+        var note = value(el.querySelector('.ap-note'));
+        if (!picks.length && !note) { skipped.push(id); continue; }
+        parts.push(head + NL + '→ ' + (picks.length ? picks.join('; ') : '(nothing chosen)') + (note ? NL + 'note: ' + note : ''));
+      } else {
+        var text = value(el.querySelector('textarea'));
+        if (!text) continue;
+        if (kind === 'overall') { parts.push('Overall' + NL + text); continue; }
+        var caption = el.getAttribute('data-caption');
+        parts.push('Reply · ' + at + ' · ' + kind + (caption ? NL + '> "' + caption + '"' : '') + NL + text);
+      }
+    }
+    if (skipped.length) parts.push('Skipped: ' + skipped.join(', '));
+    if (!parts.length) parts.push('(nothing entered yet)');
+    var header = ['agent-page reply · format 2', 'page: ' + main.getAttribute('data-title'), 'source: ' + source];
+    return header.join(NL) + NL + NL + parts.join(NL + NL) + NL;
+  }
+  function refresh(event) {
+    var target = event && event.target;
+    if (target && target.className === 'ap-other' && target.value.trim()) {
+      var pick = target.parentNode.querySelector('.ap-other-pick');
+      if (pick) pick.checked = true;
+    }
+    out.value = reply();
+    status.textContent = '';
+  }
+  function copied() { status.textContent = 'Copied. Paste it into the chat.'; }
+  function fallback() {
+    out.focus();
+    out.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    if (ok) copied(); else status.textContent = 'This view blocked copying. The text below is selected: press Ctrl+C or ⌘C.';
+  }
+  main.addEventListener('input', refresh);
+  main.addEventListener('change', refresh);
+  out.addEventListener('focus', function () { out.select(); });
+  out.addEventListener('click', function () { out.select(); });
+  document.getElementById('ap-copy').addEventListener('click', function () {
+    out.value = reply();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(out.value).then(function () { out.select(); copied(); }, fallback);
+    } else fallback();
+  });
+  refresh();
+})();
+</script>
+<footer>agent-page test · format 2</footer>
+</body>
+</html>

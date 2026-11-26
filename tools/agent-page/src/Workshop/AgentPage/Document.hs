@@ -4,11 +4,14 @@ A document is parameterised by its media payload: the parser produces
 'MediaRef's naming source files, and the build step traverses the document to
 replace them with encoded media.
 -}
-module Workshop.MediaPage.Document (
+module Workshop.AgentPage.Document (
     Document (..),
     Section (..),
     Block (..),
     Tab (..),
+    Question (..),
+    QuestionKind (..),
+    Choice (..),
     MediaRef (..),
 ) where
 
@@ -18,12 +21,18 @@ data Document media = Document
     { docTitle :: Text
     , docMeta :: Maybe Text
     , docDate :: Maybe Text
+    , docReply :: Bool
+    -- ^ whether every section and media item gets a reply box
     , docSections :: [Section media]
     }
     deriving (Eq, Show, Functor, Foldable, Traversable)
 
+{- | A run of content. Only content before the first heading has no heading;
+it always comes first.
+-}
 data Section media = Section
-    { sectionHeading :: Text
+    { sectionHeading :: Maybe Text
+    , sectionLine :: Int
     , sectionBlocks :: [Block media]
     }
     deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -32,6 +41,7 @@ data Block media
     = Paragraph Text
     | Media media
     | Tabs [Tab media]
+    | Ask (Question media)
     deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Tab media = Tab
@@ -39,6 +49,27 @@ data Tab media = Tab
     , tabBlocks :: [Block media]
     }
     deriving (Eq, Show, Functor, Foldable, Traversable)
+
+data QuestionKind = SingleChoice | MultipleChoice | FreeText
+    deriving (Eq, Show)
+
+data Question media = Question
+    { questionKind :: QuestionKind
+    , questionLine :: Int
+    -- ^ line of the question text
+    , questionText :: Text
+    , questionContext :: [Block media]
+    -- ^ paragraphs and media shown between the question and its options
+    , questionChoices :: [Choice]
+    -- ^ empty for free text
+    }
+    deriving (Eq, Show, Functor, Foldable, Traversable)
+
+data Choice = Choice
+    { choiceLabel :: Text
+    , choiceRecommended :: Bool
+    }
+    deriving (Eq, Show)
 
 -- | A media line as written: @![caption](path)@ on a given source line.
 data MediaRef = MediaRef

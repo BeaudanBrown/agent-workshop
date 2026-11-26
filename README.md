@@ -1,7 +1,7 @@
 # agent-workshop
 Harness-independent skills, Haskell tools, and NixOS modules for agent workflows.
 
-- [`media-page`](tools/media-page/README.md): build a self-contained HTML page presenting screenshots and video.
+- [`agent-page`](tools/agent-page/README.md): build a self-contained HTML page that presents screenshots and video, asks questions, and turns the answers into text to paste back.
 - [`sec`](tools/sec/README.md): run a project command with SecretSpec values from an interactive Bitwarden session.
 - [`check-index`](tools/check-index/src/Workshop/CheckIndex.hs): validate the staged Git snapshot with `nix flake check`.
 

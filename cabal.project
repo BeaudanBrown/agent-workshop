@@ -2,5 +2,5 @@ packages:
   lib/workshop-cli
   lib/workshop-test
   tools/check-index
-  tools/media-page
+  tools/agent-page
   tools/sec

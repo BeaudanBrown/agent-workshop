@@ -16,8 +16,8 @@
   workshop-test,
 }:
 mkDerivation {
-  pname = "media-page";
-  version = "0.1.0";
+  pname = "agent-page";
+  version = "0.2.0";
   src = ./.;
   isLibrary = true;
   isExecutable = true;
@@ -45,7 +45,7 @@ mkDerivation {
     unix
     workshop-test
   ];
-  description = "Build self-contained HTML pages that present images and video";
+  description = "Build self-contained HTML pages that present media and ask questions";
   license = "unknown";
-  mainProgram = "media-page";
+  mainProgram = "agent-page";
 }

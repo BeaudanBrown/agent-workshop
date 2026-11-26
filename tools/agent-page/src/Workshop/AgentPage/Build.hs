@@ -5,7 +5,7 @@
 Validation runs to completion before any encoding, and the page is written
 atomically, so a failed run leaves no output behind.
 -}
-module Workshop.MediaPage.Build (
+module Workshop.AgentPage.Build (
     Config (..),
     buildPage,
     defaultMaxBytes,
@@ -25,14 +25,14 @@ import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8')
-import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
+import System.Directory (createDirectoryIfMissing, doesFileExist, makeAbsolute, renameFile)
 import System.FilePath (isAbsolute, takeDirectory, takeExtension, takeFileName, (</>))
 import System.Process (getCurrentPid)
 import Text.Printf (printf)
-import Workshop.MediaPage.Document
-import Workshop.MediaPage.Media
-import Workshop.MediaPage.Parse (ParseError (..), parseDocument)
-import Workshop.MediaPage.Render (Placed (..), renderPage)
+import Workshop.AgentPage.Document
+import Workshop.AgentPage.Media
+import Workshop.AgentPage.Parse (ParseError (..), parseDocument)
+import Workshop.AgentPage.Render (Placed (..), renderPage)
 
 data Config = Config
     { configTools :: Tools
@@ -89,10 +89,11 @@ buildPage config input = do
         Nothing -> pure (Left (located (refLine ref) "unsupported media type"))
         Just kind -> do
             result <- encodeMedia (configTools config) (configOutDir config </> ".cache") (resolve ref) kind
-            pure (either (Left . located (refLine ref)) (Right . Placed (refCaption ref)) result)
+            pure (either (Left . located (refLine ref)) (Right . Placed (refCaption ref) (refLine ref)) result)
 
     writePage doc = do
-        let page = BL.toStrict (toLazyByteString (renderPage (configFooter config) doc))
+        source <- makeAbsolute input
+        let page = BL.toStrict (toLazyByteString (renderPage (configFooter config) source doc))
             size = BS.length page
         if size > configMaxBytes config
             then failed [input ++ ": " ++ oversize size doc]
@@ -117,7 +118,7 @@ buildPage config input = do
                 ++ mebibytes size
                 ++ ", over the "
                 ++ mebibytes (configMaxBytes config)
-                ++ " limit set by MEDIA_PAGE_MAX_BYTES; largest media: "
+                ++ " limit set by AGENT_PAGE_MAX_BYTES; largest media: "
                 ++ intercalate ", " (map describe largest)
 
 mebibytes :: Int -> String

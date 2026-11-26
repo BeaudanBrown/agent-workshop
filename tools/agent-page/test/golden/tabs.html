@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Escaping &lt;&amp;&gt; &quot;quotes&quot; and &#39;apostrophes&#39;</title>
+<title>Tabs</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f7f5;--fg:#18201d;--muted:#5b6862;--card:#fff;--line:#d6ddd8;--accent:#1f6f5c}
 @media (prefers-color-scheme:dark){:root{--bg:#111614;--fg:#e3eae6;--muted:#9aa7a0;--card:#19201d;--line:#2d3833;--accent:#6cc4a7}}
@@ -27,35 +27,50 @@ figcaption{padding:10px 14px;color:var(--muted);font-size:.93rem}
 .tabs>input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 .tabs>.panel{display:none}
 footer{max-width:960px;margin:0 auto;padding:0 20px 28px;color:var(--muted);font-size:.8rem}
+.tabs>input:nth-of-type(1):checked~.panel:nth-of-type(1){display:block}
+.tabs>input:nth-of-type(2):checked~.panel:nth-of-type(2){display:block}
+.tabs>input:nth-of-type(3):checked~.panel:nth-of-type(3){display:block}
 </style>
 </head>
 <body>
 <main>
 <header>
-<h1>Escaping &lt;&amp;&gt; &quot;quotes&quot; and &#39;apostrophes&#39;</h1>
-<p class="meta">Synthetic fixture · 2026-11-26</p>
+<h1>Tabs</h1>
 </header>
 <section>
-<h2>Media</h2>
-<p>A paragraph with &lt;tags&gt; &amp; ampersands.</p>
+<h2>Two tabs</h2>
+<div class="tabs">
+<input type="radio" name="t1" id="t1-1" checked><label for="t1-1">One</label>
+<input type="radio" name="t1" id="t1-2"><label for="t1-2">Two</label>
+<div class="panel">
+<p>First.</p>
+</div>
+<div class="panel">
 <figure>
-<img src="data:image/webp;base64,QllURVM=" alt="A still image" width="640" height="360">
-<figcaption>A still image</figcaption>
+<img src="data:image/webp;base64,QllURVM=" alt="Second" width="10" height="10">
+<figcaption>Second</figcaption>
 </figure>
-<figure>
-<video controls muted playsinline preload="metadata" width="1280" height="800">
-<source type="video/mp4" src="data:video/mp4;base64,QllURVM=">
-</video>
-<figcaption>A clip</figcaption>
-</figure>
-<figure>
-<video controls muted playsinline preload="metadata" width="320" height="240" loop autoplay>
-<source type="video/mp4" src="data:video/mp4;base64,QllURVM=">
-</video>
-<figcaption>A looping animation</figcaption>
-</figure>
+</div>
+</div>
+</section>
+<section>
+<h2>Three tabs</h2>
+<div class="tabs">
+<input type="radio" name="t2" id="t2-1" checked><label for="t2-1">A</label>
+<input type="radio" name="t2" id="t2-2"><label for="t2-2">B</label>
+<input type="radio" name="t2" id="t2-3"><label for="t2-3">C</label>
+<div class="panel">
+<p>a</p>
+</div>
+<div class="panel">
+<p>b</p>
+</div>
+<div class="panel">
+<p>c</p>
+</div>
+</div>
 </section>
 </main>
-<footer>media-page test · format 1</footer>
+<footer>agent-page test · format 2</footer>
 </body>
 </html>

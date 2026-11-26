@@ -47,7 +47,7 @@
         writing-for-agents = "${matt-pocock-skills}/skills/productivity/writing-for-agents";
       };
       workshopSkills = {
-        media-page = ./skills/media-page;
+        agent-page = ./skills/agent-page;
       };
       selectedSkills = upstreamSkills // workshopSkills;
     in
@@ -62,7 +62,7 @@
         in
         {
           check-index = pkgs.callPackage ./tools/check-index/package.nix { inherit wrapTool; };
-          media-page = pkgs.callPackage ./tools/media-page/package.nix { inherit wrapTool; };
+          agent-page = pkgs.callPackage ./tools/agent-page/package.nix { inherit wrapTool; };
           sec = pkgs.callPackage ./tools/sec/package.nix {
             inherit wrapTool;
             bw = pkgs.bitwarden-cli;
@@ -92,7 +92,7 @@
         {
           formatting = formatting.${system}.config.build.check self;
           # Building a tool runs its test suite.
-          inherit (packages) check-index media-page sec;
+          inherit (packages) check-index agent-page sec;
           cabal-nix =
             pkgs.runCommand "cabal-nix-current"
               {
@@ -121,9 +121,9 @@
             hlint lib tools
             touch "$out"
           '';
-          media-page-render = import ./tools/media-page/test/render-check.nix {
+          agent-page-render = import ./tools/agent-page/test/render-check.nix {
             inherit pkgs ffmpeg;
-            media-page = packages.media-page;
+            agent-page = packages.agent-page;
           };
           writing-for-agents-reference = pkgs.runCommand "writing-for-agents-reference" { } ''
             test -r ${packages.skills}/writing-for-agents/SKILL-MECHANICS.md
@@ -152,8 +152,8 @@
               pkgs.hlint
               pkgs.nixfmt
             ];
-            MEDIA_PAGE_FFMPEG = ffmpeg;
-            MEDIA_PAGE_FFPROBE = ffprobe;
+            AGENT_PAGE_FFMPEG = ffmpeg;
+            AGENT_PAGE_FFPROBE = ffprobe;
           };
         }
       );
