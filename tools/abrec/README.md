@@ -1,6 +1,7 @@
 # abrec
 
-> **Status: design.** Nothing here is implemented yet. This document is the
+> **Status:** phase 1 (library, rendering, admin site, NixOS module) is
+> implemented. Browser recording (phase 2) is design only. This document is the
 > working spec; change it before changing code.
 
 Record yourself reading a book aloud, one chapter per take, and publish the
@@ -83,25 +84,30 @@ Safari is not a target.
 
 ## Library
 
-    <libraryDir>/                    owned by the abrec user
-      library.json                   library title
-      books/<slug>/book.json         title; season; hidden; optional author,
-                                     description
-      books/<slug>/cover.jpg         optional
-      books/<slug>/<NN>.<ext>        master: the take or uploaded file as received
-      books/<slug>/<NN>.json         optional title and episode title; hidden;
-                                     recorded time; source
-      takes/<id>/<segment>/          chunks of a take in progress
-      cache/                         encoded chapters, keyed by master hash + preset
-      releases/<id>/<secret>/…       rendered sites
-      site -> releases/<id>          the only directory nginx serves
-      secret                         URL secret, generated on first render
+    <libraryDir>/                          0711, owned by the abrec user
+      library.json                         library title; next season number
+      secret                               URL secret
+      books/<slug>/book.json               title; season; hidden; created; optional
+                                           author, description, cover hash
+      books/<slug>/cover.jpg               optional, 1400 px square
+      books/<slug>/chapters/<id>.json      number; optional title and episode title;
+                                           hidden; recorded time; source; master
+      books/<slug>/masters/<sha256>.<ext>  audio as received
+      incoming/                            staged uploads awaiting chapter numbers
+      takes/<id>/<segment>/                chunks of a take in progress (phase 2)
+      tmp/                                 request bodies and scratch files
+      cache/                               encodes and title cards, keyed by hash
+      releases/<id>/<secret>/…             rendered sites (0755)
+      site -> releases/<id>                the only path nginx serves
 
 - A book's slug and season number are fixed when the book is created.
   Renaming changes the title only, so feed URLs and library order never
   change. Season numbers are never reused after a book is deleted.
-- Files are the source of truth; there is no database. Writes are serialised by
-  one lock.
+- A chapter has a stable random identifier; renumbering edits its JSON. Masters
+  are named by hash, so replacing audio never overwrites a file in use, and a
+  master is deleted once no chapter refers to it.
+- Files are the source of truth; there is no database. Every read and write
+  holds one lock, and each JSON file is replaced by renaming a complete file.
 - Masters are kept as received, so a later preset change re-encodes from the
   best available audio.
 - abrec makes no backups. The masters exist only in `libraryDir`; protecting
@@ -167,14 +173,21 @@ Rotating the secret invalidates every listener URL; listeners follow again.
       enable = true;
       adminDomain = "abrec.example.com";
       publicDomain = "audiobooks.example.com";
-      # libraryDir defaults to /var/lib/abrec (StateDirectory)
+      # port = 8790;          admin site on 127.0.0.1
+      # maxUploadSize = "4g"; nginx limit for admin requests
+      # libraryDir is /var/lib/abrec (read-only option, StateDirectory)
     };
-    # Defines services.nginx.virtualHosts.<adminDomain> (proxy, large uploads)
-    # and .<publicDomain> (static, no autoindex, dotfiles denied). Add TLS and
-    # listen addresses by merging into those vhosts.
 
-`package.nix` passes ffmpeg-headless, `ffprobe`, `curl` and the title-card font
-through `wrapTool`.
+The module defines `services.nginx.virtualHosts.<adminDomain>` (proxy with
+`Host` forwarded, large unbuffered uploads, strict CSP) and `.<publicDomain>`
+(static files from `site`, no listing, dotfiles denied, RSS content type). Add
+TLS and listen addresses by merging into those virtual hosts.
+
+The service runs `abrec serve CONFIG` as the `abrec` user under systemd
+hardening; `abrec render CONFIG` rebuilds the public site once from a shell
+(`sudo -u abrec`). `package.nix` passes ffmpeg-headless, `ffprobe`, `curl`, the
+title-card font and the static directory (admin CSS and htmx) through
+`wrapTool`.
 
 ## Stack
 
@@ -190,8 +203,8 @@ through `wrapTool`.
 
 ## Tests
 
-In-process HTTP tests against the WAI application, with fake `ffmpeg`,
-`ffprobe` and `curl` programs:
+In-process HTTP tests against the WAI application, running the real
+`ffmpeg` and `ffprobe` on generated tones and images, with a fake `curl`:
 
 - book and chapter CRUD; slug stable across renames; replace needs
   confirmation;

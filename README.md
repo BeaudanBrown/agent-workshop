@@ -3,6 +3,7 @@ Harness-independent skills, Haskell tools, and NixOS modules for agent workflows
 
 - [`agent-page`](tools/agent-page/README.md): build a self-contained HTML page that presents screenshots and video, asks questions, and turns the answers into text to paste back.
 - [`sec`](tools/sec/README.md): run a project command with SecretSpec values from an interactive Bitwarden session.
+- [`abrec`](tools/abrec/README.md): record yourself reading books aloud and publish the chapters as private podcast feeds, with a NixOS module (`nixosModules.abrec`).
 - [`check-index`](tools/check-index/src/Workshop/CheckIndex.hs): validate the staged Git snapshot with `nix flake check`.
 
 ## Haskell layout
