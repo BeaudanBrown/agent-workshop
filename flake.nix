@@ -46,7 +46,10 @@
         grilling = "${matt-pocock-skills}/skills/productivity/grilling";
         writing-for-agents = "${matt-pocock-skills}/skills/productivity/writing-for-agents";
       };
-      selectedSkills = upstreamSkills;
+      workshopSkills = {
+        media-page = ./skills/media-page;
+      };
+      selectedSkills = upstreamSkills // workshopSkills;
     in
     {
       homeManagerModules.sec = import ./modules/home-manager/sec.nix { inherit self sec-tools-nixpkgs; };
