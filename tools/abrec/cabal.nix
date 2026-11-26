@@ -9,15 +9,20 @@
   cryptohash-sha256,
   directory,
   filepath,
+  http-types,
   ihp-hsx,
   lib,
   process,
+  scotty,
   stm,
   temporary,
   text,
   time,
   transformers,
   unix,
+  wai,
+  wai-extra,
+  warp,
   workshop-cli,
   workshop-test,
 }:
@@ -37,24 +42,33 @@ mkDerivation {
     cryptohash-sha256
     directory
     filepath
+    http-types
     ihp-hsx
     process
+    scotty
     stm
     text
     time
     transformers
     unix
+    wai
+    wai-extra
+    warp
     workshop-cli
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [
     base
+    bytestring
     directory
     filepath
+    http-types
     process
     temporary
     text
     time
+    wai
+    wai-extra
     workshop-test
   ];
   description = "Record read-aloud books and publish them as private podcast feeds";

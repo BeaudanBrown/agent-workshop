@@ -5,18 +5,27 @@ module Main (main) where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad (forM_)
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as BC
+import Data.ByteString.Lazy qualified as BL
 import Data.Either (isLeft, isRight)
 import Data.IORef (modifyIORef', newIORef, readIORef)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding (decodeUtf8)
 import Data.Text.IO qualified as TIO
 import Data.Time (UTCTime (..), fromGregorian)
-import System.Directory (copyFile, doesDirectoryExist, doesFileExist, getModificationTime, getPermissions, getSymbolicLinkTarget, listDirectory, setOwnerExecutable, setPermissions)
+import Network.HTTP.Types (Header, Method, renderSimpleQuery, statusCode)
+import Network.Wai (Application, Request (..), defaultRequest)
+import Network.Wai.Test (SRequest (..), SResponse (..), runSession, setPath, srequest)
+import System.Directory (copyFile, createDirectory, doesDirectoryExist, doesFileExist, getModificationTime, getPermissions, getSymbolicLinkTarget, listDirectory, setOwnerExecutable, setPermissions)
 import System.Environment (getEnv, setEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (callProcess, readProcess)
+import Workshop.Abrec.Admin.App (Env (..), adminApp)
+import Workshop.Abrec.Config (Config (..))
 import Workshop.Abrec.Feed
 import Workshop.Abrec.Library
 import Workshop.Abrec.Media
@@ -34,6 +43,7 @@ main = do
     feedTests
     publisherTests
     siteTests
+    adminTests
 
 -- Derived values -------------------------------------------------------
 
@@ -379,3 +389,154 @@ siteTests = withSystemTempDirectory "abrec-site" $ \root -> do
 
 contains :: String -> Text -> Text -> IO ()
 contains label needle haystack = assert (needle `T.isInfixOf` haystack) (label ++ ": missing " ++ T.unpack needle)
+
+-- Admin site -----------------------------------------------------------
+
+adminTests :: IO ()
+adminTests = withSystemTempDirectory "abrec-admin" $ \root -> do
+    putStrLn "abrec: admin"
+    curl <- fakeCurl root
+    setEnv "ABREC_CURL" curl
+    tools <- loadTools
+    store <- openStore (root </> "library")
+    createDirectory (root </> "static")
+    writeFile (root </> "static" </> "admin.css") "body {}"
+    let publicUrl = "https://audiobooks.example.com"
+        ffmpeg arguments = callProcess (toolFfmpeg tools) (["-hide_banner", "-loglevel", "error", "-y"] ++ arguments)
+    publisher <- startPublisher (renderSite tools store publicUrl)
+    app <- adminApp (Env (Config (root </> "library") "abrec.example.com" publicUrl 0) tools store publisher (root </> "static"))
+    ffmpeg ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2", root </> "tone.wav"]
+    ffmpeg ["-f", "lavfi", "-i", "color=c=blue:s=640x480", "-frames:v", "1", root </> "cover.png"]
+    tone <- BL.readFile (root </> "tone.wav")
+    let host = ("Host", "abrec.example.com")
+        sameSite = ("Sec-Fetch-Site", "same-origin")
+        get' path = call app "GET" path [host] Nothing
+        post' path fields = call app "POST" path [host, sameSite] (Just (form fields))
+        upload path parts = call app "POST" path [host, sameSite] (Just (multipart parts))
+
+    wrongHost <- call app "GET" "/" [("Host", "evil.example")] Nothing
+    equal "unknown hosts are refused" 400 (code wrongHost)
+    withPort <- call app "GET" "/" [("Host", "abrec.example.com:443")] Nothing
+    equal "the admin host with a port" 200 (code withPort)
+    home <- get' "/"
+    equal "library page" 200 (code home)
+    contains "library title" "Audiobooks" (body home)
+
+    crossSite <- call app "POST" "/books" [host, ("Sec-Fetch-Site", "cross-site")] (Just (form [("title", "X")]))
+    equal "cross-site writes are refused" 403 (code crossSite)
+    noOrigin <- call app "POST" "/books" [host] (Just (form [("title", "X")]))
+    equal "writes without an origin are refused" 403 (code noOrigin)
+    created <- call app "POST" "/books" [host, ("Origin", "https://abrec.example.com")] (Just (form [("title", "The Hobbit"), ("author", "J. R. R. Tolkien")]))
+    equal "creating redirects to the book" (Just "/books/the-hobbit") (location created)
+    blank <- post' "/books" [("title", "  ")]
+    equal "a blank title is a form error" 400 (code blank)
+    bookPage <- get' "/books/the-hobbit"
+    contains "book page" "The Hobbit" (body bookPage)
+    missing <- get' "/books/nope"
+    equal "unknown books" 404 (code missing)
+
+    notAudio <- upload "/books/the-hobbit/uploads" [("audio", Right ("notes.txt", "hello"))]
+    equal "non-audio uploads are refused" 400 (code notAudio)
+    uploaded <- upload "/books/the-hobbit/uploads" [("audio", Right ("03 Short Rest.wav", tone))]
+    let confirmPath = fromMaybe "" (location uploaded)
+    assert ("/books/the-hobbit/uploads/" `BC.isPrefixOf` confirmPath) "uploading leads to confirmation"
+    confirm <- get' confirmPath
+    contains "number from the file name" "value=\"3\"" (body confirm)
+    contains "title from the file name" "value=\"Short Rest\"" (body confirm)
+    saved <- post' confirmPath [("number-0", "3"), ("title-0", "A Short Rest")]
+    equal "saving returns to the book" (Just "/books/the-hobbit") (location saved)
+    chapter <- onlyChapter store "the-hobbit"
+    equal "saved chapter" (3, Just "A Short Rest") (chapterNumber chapter, chapterTitle chapter)
+
+    again <- upload "/books/the-hobbit/uploads" [("audio", Right ("take.wav", tone))]
+    let againPath = fromMaybe "" (location again)
+    refused <- post' againPath [("number-0", "3")]
+    equal "a taken number needs Replace" 400 (code refused)
+    replaced <- post' againPath [("number-0", "3"), ("replace-0", "on")]
+    equal "replacing" (Just "/books/the-hobbit") (location replaced)
+    afterReplace <- onlyChapter store "the-hobbit"
+    equal "replacing keeps the chapter" (chapterId chapter, Just "A Short Rest") (chapterId afterReplace, chapterTitle afterReplace)
+
+    let chapterUrl = "/books/the-hobbit/chapters/" <> encode' (chapterId chapter)
+    _ <- post' chapterUrl [("number", "1"), ("title", "An Unexpected Party"), ("episodeTitle", "Prologue")]
+    _ <- post' (chapterUrl <> "/hidden") [("hidden", "on")]
+    edited <- onlyChapter store "the-hobbit"
+    equal "edited chapter" (1, "Prologue", True) (chapterNumber edited, episodeTitle edited, chapterHidden edited)
+    master <- get' (chapterUrl <> "/master")
+    equal "master audio" (Just "audio/wav") (lookup "Content-Type" (simpleHeaders master))
+
+    httpCover <- upload "/books/the-hobbit/cover" [("cover", Right ("", "")), ("url", Left "http://example.com/c.png")]
+    equal "http cover addresses are refused" 400 (code httpCover)
+    setEnv "ABREC_FAKE_CURL_SOURCE" (root </> "cover.png")
+    fetchedCover <- upload "/books/the-hobbit/cover" [("cover", Right ("", "")), ("url", Left "https://example.com/c.png")]
+    equal "https cover" (Just "/books/the-hobbit") (location fetchedCover)
+    library <- loadLibrary store
+    assert (isJust (bookCoverSha256 . entryBook =<< findEntry library "the-hobbit")) "cover is set"
+    cover <- get' "/books/the-hobbit/cover"
+    equal "cover image" (Just "image/jpeg") (lookup "Content-Type" (simpleHeaders cover))
+
+    awaitIdle publisher
+    state <- publishState publisher
+    assert (case state of Published _ -> True; _ -> False) ("publishing succeeded: " ++ show state)
+    statusPage <- get' "/status"
+    contains "status fragment" "up to date" (body statusPage)
+
+    secret <- readSecret store
+    _ <- post' "/secret/rotate" []
+    rotated <- readSecret store
+    assert (secret /= rotated) "rotating from the admin site"
+
+    _ <- post' (chapterUrl <> "/delete") []
+    afterDelete <- loadLibrary store
+    equal "chapter deleted" (Just []) (entryChapters <$> findEntry afterDelete "the-hobbit")
+    deleted <- post' "/books/the-hobbit/delete" []
+    equal "deleting a book returns to the library" (Just "/") (location deleted)
+    empty <- loadLibrary store
+    equal "book deleted" [] (libraryEntries empty)
+
+    css <- get' "/static/admin.css"
+    equal "static files" 200 (code css)
+    other <- get' "/static/secret"
+    equal "only listed static files" 404 (code other)
+    awaitIdle publisher
+  where
+    code = statusCode . simpleStatus
+    body = decodeUtf8 . BL.toStrict . simpleBody
+    location = lookup "Location" . simpleHeaders
+    encode' = BC.pack . T.unpack
+
+onlyChapter :: Store -> Text -> IO Chapter
+onlyChapter store slug = do
+    library <- loadLibrary store
+    case entryChapters <$> findEntry library slug of
+        Just [chapter] -> pure chapter
+        other -> fail ("expected one chapter, got " ++ show (length <$> other))
+
+call :: Application -> Method -> ByteString -> [Header] -> Maybe (ByteString, BL.ByteString) -> IO SResponse
+call app method path headers payload =
+    runSession (srequest (SRequest request (maybe "" snd payload))) app
+  where
+    allHeaders = headers ++ maybe [] (\(mime, _) -> [("Content-Type", mime)]) payload
+    request =
+        setPath
+            defaultRequest
+                { requestMethod = method
+                , requestHeaders = allHeaders
+                , requestHeaderHost = lookup "Host" headers
+                }
+            path
+
+form :: [(ByteString, ByteString)] -> (ByteString, BL.ByteString)
+form fields = ("application/x-www-form-urlencoded", BL.fromStrict (renderSimpleQuery False fields))
+
+-- | A multipart body: plain fields, or files with a name and contents.
+multipart :: [(ByteString, Either ByteString (ByteString, BL.ByteString))] -> (ByteString, BL.ByteString)
+multipart parts = ("multipart/form-data; boundary=" <> boundary, BL.concat (map part parts) <> BL.fromStrict ("--" <> boundary <> "--\r\n"))
+  where
+    boundary = "abrec-test-boundary"
+    part (name, Left value) =
+        BL.fromStrict ("--" <> boundary <> "\r\nContent-Disposition: form-data; name=\"" <> name <> "\"\r\n\r\n" <> value <> "\r\n")
+    part (name, Right (filename, contents)) =
+        BL.fromStrict ("--" <> boundary <> "\r\nContent-Disposition: form-data; name=\"" <> name <> "\"; filename=\"" <> filename <> "\"\r\nContent-Type: application/octet-stream\r\n\r\n")
+            <> contents
+            <> "\r\n"

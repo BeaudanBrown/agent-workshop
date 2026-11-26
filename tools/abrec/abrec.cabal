@@ -12,6 +12,9 @@ library
   import:          shared
   hs-source-dirs:  src
   exposed-modules:
+    Workshop.Abrec.Admin.App
+    Workshop.Abrec.Admin.Security
+    Workshop.Abrec.Admin.Views
     Workshop.Abrec.Config
     Workshop.Abrec.Feed
     Workshop.Abrec.Library
@@ -30,13 +33,18 @@ library
     , cryptohash-sha256
     , directory
     , filepath
+    , http-types
     , ihp-hsx
     , process
+    , scotty
     , stm
     , text
     , time
     , transformers
     , unix
+    , wai
+    , wai-extra
+    , warp
     , workshop-cli
 
 executable abrec
@@ -57,10 +65,14 @@ test-suite abrec-test
   build-depends:
     , abrec
     , base
+    , bytestring
     , directory
     , filepath
+    , http-types
     , process
     , temporary
     , text
     , time
+    , wai
+    , wai-extra
     , workshop-test
