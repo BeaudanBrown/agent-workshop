@@ -9,6 +9,7 @@ removes its partial release and leaves the current site serving.
 -}
 module Workshop.Abrec.Site (
     renderSite,
+    bookArtwork,
     listenerBase,
     bookFeedUrl,
     libraryFeedUrl,
@@ -101,9 +102,7 @@ prepare :: Tools -> Store -> Entry -> ExceptT Text IO Shelf
 prepare tools store entry = do
     let slug = entrySlug entry
         book = entryBook entry
-    (artwork, artworkFile) <- case bookCoverSha256 book of
-        Just digest -> pure (coverPath store slug, "cover-" <> T.take 12 digest <> ".jpg")
-        Nothing -> card tools store (bookTitle book) (bookAuthor book)
+    (artwork, artworkFile) <- ExceptT (bookArtwork tools store entry)
     chapters <- forM (entryChapters entry) $ \chapter -> do
         let master = chapterMaster chapter
         (audio, encoded) <-
@@ -115,6 +114,14 @@ prepare tools store entry = do
     pure (Shelf entry artwork artworkFile chapters)
   where
     prefixed prefix = either (Left . (prefix <>)) Right
+
+-- | A book's cover, or its cached title card, with the file name listeners see.
+bookArtwork :: Tools -> Store -> Entry -> IO (Either Text (FilePath, Text))
+bookArtwork tools store entry = case bookCoverSha256 book of
+    Just digest -> pure (Right (coverPath store (entrySlug entry), "cover-" <> T.take 12 digest <> ".jpg"))
+    Nothing -> runExceptT (card tools store (bookTitle book) (bookAuthor book))
+  where
+    book = entryBook entry
 
 -- | A cached title card for a title and author.
 card :: Tools -> Store -> Text -> Maybe Text -> ExceptT Text IO (FilePath, Text)

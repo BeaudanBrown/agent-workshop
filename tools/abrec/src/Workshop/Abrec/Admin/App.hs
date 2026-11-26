@@ -21,7 +21,6 @@ import Data.Time (getCurrentTimeZone)
 import Network.HTTP.Types (Status, status400, status404)
 import Network.Wai (Application)
 import Network.Wai.Parse (FileInfo (..), defaultParseRequestBodyOptions)
-import System.Directory (doesFileExist)
 import System.FilePath (takeBaseName, takeExtension, (</>))
 import Text.Blaze.Html (Html)
 import Text.Blaze.Html.Renderer.Text (renderHtml)
@@ -33,7 +32,7 @@ import Workshop.Abrec.Config (Config (..))
 import Workshop.Abrec.Library
 import Workshop.Abrec.Media (Tools, fetchHttps, normaliseCover, probeAudio)
 import Workshop.Abrec.Publisher (Publisher, publishState, requestPublish)
-import Workshop.Abrec.Site (bookFeedUrl, libraryFeedUrl, listenerBase)
+import Workshop.Abrec.Site (bookArtwork, bookFeedUrl, libraryFeedUrl, listenerBase)
 
 data Env = Env
     { envConfig :: Config
@@ -102,14 +101,9 @@ routes env = do
         changed env "/" (deleteBook store (entrySlug entry))
 
     get "/books/:slug/cover" $ withEntry env $ \entry -> do
-        let slug = entrySlug entry
-        present <- liftIO (doesFileExist (coverPath store slug))
-        if present
-            then setHeader "Content-Type" "image/jpeg" >> file (coverPath store slug)
-            else do
-                -- The title card the listener sees, from the published site.
-                secret <- liftIO (readSecret store)
-                redirect (LT.fromStrict (listenerBase publicUrl secret <> slug <> "/"))
+        (path, _) <- outcome (bookPath entry) (bookArtwork tools store entry)
+        setHeader "Content-Type" "image/jpeg"
+        file path
 
     post "/books/:slug/cover" $ withEntry env $ \entry -> filesOpts defaultParseRequestBodyOptions $ \params files -> do
         let slug = entrySlug entry

@@ -465,6 +465,8 @@ adminTests = withSystemTempDirectory "abrec-admin" $ \root -> do
     master <- get' (chapterUrl <> "/master")
     equal "master audio" (Just "audio/wav") (lookup "Content-Type" (simpleHeaders master))
 
+    titleCardCover <- get' "/books/the-hobbit/cover"
+    equal "without a cover the admin shows the title card" (Just "image/jpeg") (lookup "Content-Type" (simpleHeaders titleCardCover))
     httpCover <- upload "/books/the-hobbit/cover" [("cover", Right ("", "")), ("url", Left "http://example.com/c.png")]
     equal "http cover addresses are refused" 400 (code httpCover)
     setEnv "ABREC_FAKE_CURL_SOURCE" (root </> "cover.png")
