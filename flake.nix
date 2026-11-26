@@ -147,6 +147,7 @@
             packageDirs
             ffmpeg
             ffprobe
+            abrecFont
             ;
         in
         {
@@ -160,6 +161,10 @@
             ];
             AGENT_PAGE_FFMPEG = ffmpeg;
             AGENT_PAGE_FFPROBE = ffprobe;
+            ABREC_FFMPEG = ffmpeg;
+            ABREC_FFPROBE = ffprobe;
+            ABREC_FONT = abrecFont;
+            ABREC_TEST_SHELL = pkgs.runtimeShell;
           };
         }
       );

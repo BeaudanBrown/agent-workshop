@@ -19,12 +19,20 @@ let
 
   ffmpeg = lib.getExe' pkgs.ffmpeg-headless "ffmpeg";
   ffprobe = lib.getExe' pkgs.ffmpeg-headless "ffprobe";
+  # Title cards in abrec.
+  abrecFont = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans-Bold.ttf";
 
   # Programs and arguments a test suite needs beyond its Haskell dependencies.
   testSetup = {
     agent-page = hlib.overrideCabal (drv: {
       preCheck = (drv.preCheck or "") + ''
         export AGENT_PAGE_FFMPEG=${ffmpeg} AGENT_PAGE_FFPROBE=${ffprobe}
+      '';
+    });
+    abrec = hlib.overrideCabal (drv: {
+      preCheck = (drv.preCheck or "") + ''
+        export LC_ALL=C.UTF-8 ABREC_FFMPEG=${ffmpeg} ABREC_FFPROBE=${ffprobe} \
+          ABREC_FONT=${abrecFont} ABREC_TEST_SHELL=${pkgs.runtimeShell}
       '';
     });
     sec = hlib.overrideCabal (drv: {
@@ -80,5 +88,6 @@ in
     wrapTool
     ffmpeg
     ffprobe
+    abrecFont
     ;
 }

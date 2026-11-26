@@ -7,10 +7,13 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time (UTCTime (..), fromGregorian)
-import System.Directory (doesFileExist, listDirectory)
+import System.Directory (doesFileExist, getModificationTime, getPermissions, listDirectory, setOwnerExecutable, setPermissions)
+import System.Environment (getEnv, setEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import System.Process (callProcess, readProcess)
 import Workshop.Abrec.Library
+import Workshop.Abrec.Media
 import Workshop.Test (assert, equal)
 
 main :: IO ()
@@ -18,6 +21,8 @@ main = do
     episodeTitleTests
     slugTests
     libraryTests
+    trimTests
+    mediaTests
 
 -- Derived values -------------------------------------------------------
 
@@ -144,3 +149,81 @@ expectRight = either (\err -> fail ("unexpected failure: " ++ T.unpack err)) pur
 
 expectLeft :: String -> Either Text a -> IO ()
 expectLeft message result = assert (isLeft result) message
+
+-- Media ----------------------------------------------------------------
+
+trimTests :: IO ()
+trimTests = do
+    putStrLn "abrec: trimming"
+    equal "no silence" (0, 60) (trimWindow 60 [])
+    equal "leading and trailing" (1.5, 55.5) (trimWindow 60 [SilenceStart 0, SilenceEnd 2, SilenceStart 30, SilenceEnd 32, SilenceStart 55, SilenceEnd 60])
+    equal "trailing without an end" (0, 50.5) (trimWindow 60 [SilenceStart 50])
+    equal "middle silence stays" (0, 60) (trimWindow 60 [SilenceStart 10, SilenceEnd 20])
+    equal "all silence is kept" (0, 60) (trimWindow 60 [SilenceStart 0, SilenceEnd 60])
+
+mediaTests :: IO ()
+mediaTests = withSystemTempDirectory "abrec-media" $ \dir -> do
+    putStrLn "abrec: media"
+    curl <- fakeCurl dir
+    setEnv "ABREC_CURL" curl
+    tools <- loadTools
+    let ffmpeg arguments = callProcess (toolFfmpeg tools) (["-hide_banner", "-loglevel", "error", "-y"] ++ arguments)
+        fixture = dir </> "fixture.wav"
+        silence = ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono:d=2"]
+    ffmpeg (silence ++ ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3"] ++ silence ++ ["-filter_complex", "[0][1][2]concat=n=3:v=0:a=1", fixture])
+
+    duration <- expectRight =<< probeAudio tools fixture
+    near "fixture duration" 7 duration
+    writeFile (dir </> "text.wav") "not audio"
+    expectLeft "text is not audio" =<< probeAudio tools (dir </> "text.wav")
+
+    (encoded, facts) <- expectRight =<< cachedEncode tools (dir </> "cache") "abc" fixture duration
+    near "trimmed to the tone plus half a second each side" 4 (encodedSeconds facts)
+    stream <- probe tools ["stream=codec_name,channels,sample_rate"] encoded
+    equal "feed format" ["codec_name=mp3", "sample_rate=44100", "channels=1"] stream
+    before <- getModificationTime encoded
+    (again, _) <- expectRight =<< cachedEncode tools (dir </> "cache") "abc" fixture duration
+    after <- getModificationTime again
+    equal "a cached encode is reused" before after
+
+    ffmpeg ["-f", "lavfi", "-i", "color=c=red:s=800x600", "-frames:v", "1", dir </> "cover.png"]
+    expectRight =<< normaliseCover tools (dir </> "cover.png") (dir </> "cover.jpg")
+    coverSize <- probe tools ["stream=width,height"] (dir </> "cover.jpg")
+    equal "cover is square" ["width=1400", "height=1400"] coverSize
+    expectLeft "audio is not a cover" =<< normaliseCover tools fixture (dir </> "bad.jpg")
+    badExists <- doesFileExist (dir </> "bad.jpg")
+    assert (not badExists) "a rejected cover leaves no file"
+
+    expectRight =<< titleCard tools "The Hobbit, or There and Back Again" (Just "J. R. R. %{pts} Tolkien") (dir </> "card.jpg")
+    cardSize <- probe tools ["stream=width,height"] (dir </> "card.jpg")
+    equal "title card is square" ["width=1400", "height=1400"] cardSize
+    leftovers <- listDirectory dir
+    assert (all (\name -> not (".txt" `T.isSuffixOf` T.pack name)) leftovers) "title card text files are removed"
+    equal "short titles are large" 110 (fst (wrapTitle "The Hobbit"))
+    equal "long titles are smaller" 80 (fst (wrapTitle (T.unwords (replicate 30 "word"))))
+
+    expectLeft "plain http is refused" =<< fetchHttps tools "http://example.com/cover.png" (dir </> "fetched")
+    setEnv "ABREC_FAKE_CURL_SOURCE" (dir </> "cover.png")
+    expectRight =<< fetchHttps tools "https://example.com/cover.png" (dir </> "fetched")
+    fetched <- doesFileExist (dir </> "fetched")
+    assert fetched "https fetch writes the target"
+
+-- | A curl stand-in that copies ABREC_FAKE_CURL_SOURCE to its --output.
+fakeCurl :: FilePath -> IO FilePath
+fakeCurl dir = do
+    shell <- getEnv "ABREC_TEST_SHELL"
+    let path = dir </> "curl"
+    writeFile path . unlines $
+        [ "#!" ++ shell
+        , "while [ $# -gt 0 ]; do case \"$1\" in --output) out=\"$2\"; shift;; esac; shift; done"
+        , "cp \"$ABREC_FAKE_CURL_SOURCE\" \"$out\""
+        ]
+    permissions <- getPermissions path
+    setPermissions path (setOwnerExecutable True permissions)
+    pure path
+
+probe :: Tools -> [String] -> FilePath -> IO [String]
+probe tools entries path = lines <$> readProcess (toolFfprobe tools) (["-v", "error", "-of", "default=noprint_wrappers=1"] ++ concatMap (\entry -> ["-show_entries", entry]) entries ++ [path]) ""
+
+near :: String -> Double -> Double -> IO ()
+near label expected actual = assert (abs (expected - actual) < 0.3) (label ++ ": expected about " ++ show expected ++ ", got " ++ show actual)

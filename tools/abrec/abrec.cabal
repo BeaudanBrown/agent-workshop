@@ -14,18 +14,22 @@ library
   exposed-modules:
     Workshop.Abrec.Library
     Workshop.Abrec.Main
+    Workshop.Abrec.Media
 
   build-depends:
     , aeson
     , base               >=4.18 && <5
     , base16-bytestring
     , bytestring
+    , containers
     , cryptohash-sha256
     , directory
     , filepath
+    , process
     , text
     , time
     , unix
+    , workshop-cli
 
 executable abrec
   import:         shared
@@ -35,6 +39,8 @@ executable abrec
     , abrec
     , base
 
+-- Media tests run the real ffmpeg and ffprobe from ABREC_FFMPEG and
+-- ABREC_FFPROBE, with ABREC_FONT, and write a fake curl run by ABREC_TEST_SHELL.
 test-suite abrec-test
   import:         shared
   type:           exitcode-stdio-1.0
@@ -45,6 +51,7 @@ test-suite abrec-test
     , base
     , directory
     , filepath
+    , process
     , temporary
     , text
     , time

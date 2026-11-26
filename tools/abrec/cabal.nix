@@ -4,14 +4,17 @@
   base,
   base16-bytestring,
   bytestring,
+  containers,
   cryptohash-sha256,
   directory,
   filepath,
   lib,
+  process,
   temporary,
   text,
   time,
   unix,
+  workshop-cli,
   workshop-test,
 }:
 mkDerivation {
@@ -25,18 +28,22 @@ mkDerivation {
     base
     base16-bytestring
     bytestring
+    containers
     cryptohash-sha256
     directory
     filepath
+    process
     text
     time
     unix
+    workshop-cli
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [
     base
     directory
     filepath
+    process
     temporary
     text
     time
