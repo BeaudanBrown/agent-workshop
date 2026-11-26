@@ -113,6 +113,11 @@
                 )}
                 touch "$out"
               '';
+          hlint = pkgs.runCommand "hlint" { nativeBuildInputs = [ pkgs.hlint ]; } ''
+            cd ${./.}
+            hlint lib tools
+            touch "$out"
+          '';
           media-page-render = import ./tools/media-page/test/render-check.nix {
             inherit pkgs ffmpeg;
             media-page = packages.media-page;
