@@ -235,7 +235,9 @@ recorder is tested by hand in the target browsers.
   the wake lock, or should the page say to keep it on?
 - On a locked iPhone, in Apple Podcasts: does a serial feed continue to the
   next chapter, stop at end of chapter with the sleep timer, and keep order?
-- Whether a `podcast://` link on the listener page opens Apple Podcasts.
+- Which apps a `podcast://` link on the listener page opens (labelled "Open in
+  Podcast App"): Apple Podcasts on iOS by default, but other apps may claim it,
+  and it may need plain HTTP to redirect to HTTPS.
 - How Apple Podcasts presents the library feed's seasons and episode artwork.
 - How soon new chapters appear: the podcast app chooses when to refresh a feed.
 

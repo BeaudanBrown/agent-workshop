@@ -301,7 +301,7 @@ bookPage base shelf =
 followLinks :: Text -> Html
 followLinks feed =
     [hsx|
-        <p><a class="button" href={podcastLink}>Open in Apple Podcasts</a></p>
+        <p><a class="button" href={podcastLink}>Open in Podcast App</a></p>
         <p>Or add this address in your podcast app:</p>
         <p><input class="feed" type="text" value={feed} readonly="readonly"/></p>
     |]
