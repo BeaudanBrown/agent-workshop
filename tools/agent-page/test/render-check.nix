@@ -6,10 +6,10 @@
   agent-page,
 }:
 let
-  # The DOMPurify release DSH 0.2.2 bundles for its static HTML preview.
+  # The DOMPurify release DSH 0.2.2-rc.4 bundles for its static HTML preview.
   dompurify = pkgs.fetchurl {
-    url = "https://cdn.jsdelivr.net/npm/dompurify@3.4.13/dist/purify.min.js";
-    hash = "sha256-mrPUTXPD45R/mrcuDwvBXH8ZMdYLNluiYfyF/lkBPFY=";
+    url = "https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js";
+    hash = "sha256-LJCptG1kY/JgOKKbaG6CvJHeAf2snVIp58/js2ATTqI=";
   };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
 in
