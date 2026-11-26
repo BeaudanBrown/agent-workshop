@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabs</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f5;--fg:#18201d;--muted:#5b6862;--card:#fff;--line:#d6ddd8;--accent:#1f6f5c}
+@media (prefers-color-scheme:dark){:root{--bg:#111614;--fg:#e3eae6;--muted:#9aa7a0;--card:#19201d;--line:#2d3833;--accent:#6cc4a7}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:0 auto;padding:32px 20px 8px}
+header{margin-bottom:28px}
+h1{font-size:2rem;line-height:1.2;margin:0 0 6px}
+.meta{color:var(--muted);margin:0;font-size:.95rem}
+section{margin:0 0 36px}
+h2{font-size:1.35rem;line-height:1.3;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+p{margin:0 0 14px}
+figure{margin:0 0 22px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+figure img,figure video{display:block;width:100%;height:auto}
+figure video{background:#000}
+figcaption{padding:10px 14px;color:var(--muted);font-size:.93rem}
+.tabs{margin:0 0 22px}
+.tabs>input{position:absolute;opacity:0;pointer-events:none}
+.tabs>label{display:inline-block;padding:6px 14px;margin:0 6px 12px 0;border:1px solid var(--line);border-radius:999px;cursor:pointer;color:var(--muted);background:var(--card)}
+.tabs>input:checked+label{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.tabs>input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.tabs>.panel{display:none}
+footer{max-width:960px;margin:0 auto;padding:0 20px 28px;color:var(--muted);font-size:.8rem}
+.tabs>input:nth-of-type(1):checked~.panel:nth-of-type(1){display:block}
+.tabs>input:nth-of-type(2):checked~.panel:nth-of-type(2){display:block}
+.tabs>input:nth-of-type(3):checked~.panel:nth-of-type(3){display:block}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Tabs</h1>
+</header>
+<section>
+<h2>Two tabs</h2>
+<div class="tabs">
+<input type="radio" name="t1" id="t1-1" checked><label for="t1-1">One</label>
+<input type="radio" name="t1" id="t1-2"><label for="t1-2">Two</label>
+<div class="panel">
+<p>First.</p>
+</div>
+<div class="panel">
+<figure>
+<img src="data:image/webp;base64,QllURVM=" alt="Second" width="10" height="10">
+<figcaption>Second</figcaption>
+</figure>
+</div>
+</div>
+</section>
+<section>
+<h2>Three tabs</h2>
+<div class="tabs">
+<input type="radio" name="t2" id="t2-1" checked><label for="t2-1">A</label>
+<input type="radio" name="t2" id="t2-2"><label for="t2-2">B</label>
+<input type="radio" name="t2" id="t2-3"><label for="t2-3">C</label>
+<div class="panel">
+<p>a</p>
+</div>
+<div class="panel">
+<p>b</p>
+</div>
+<div class="panel">
+<p>c</p>
+</div>
+</div>
+</section>
+</main>
+<footer>media-page test · format 1</footer>
+</body>
+</html>

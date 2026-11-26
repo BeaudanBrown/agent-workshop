@@ -1,5 +1,5 @@
 {
-  description = "Agent Workshop Haskell development environment and curated skills";
+  description = "Agent Workshop Haskell tools, curated skills and Home Manager modules";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -25,19 +25,24 @@
       ...
     }:
     let
-      forEachSystem = nixpkgs.lib.genAttrs [
+      inherit (nixpkgs) lib;
+      forEachSystem = lib.genAttrs [
         "x86_64-linux"
         "aarch64-linux"
       ];
       formatting = forEachSystem (
         system: treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} ./treefmt.nix
       );
-      selectedSkills = {
+      workshop = forEachSystem (
+        system: import ./nix/workshop.nix { pkgs = nixpkgs.legacyPackages.${system}; }
+      );
+      upstreamSkills = {
         domain-modeling = "${matt-pocock-skills}/skills/engineering/domain-modeling";
         grill-with-docs = "${matt-pocock-skills}/skills/engineering/grill-with-docs";
         grilling = "${matt-pocock-skills}/skills/productivity/grilling";
         writing-for-agents = "${matt-pocock-skills}/skills/productivity/writing-for-agents";
       };
+      selectedSkills = upstreamSkills;
     in
     {
       homeManagerModules.sec = import ./modules/home-manager/sec.nix { inherit self sec-tools-nixpkgs; };
@@ -46,6 +51,7 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          inherit (workshop.${system}) wrapTool;
         in
         {
           check-index = pkgs.stdenv.mkDerivation {
@@ -56,12 +62,13 @@
             buildPhase = "ghc -Wall -Werror Main.hs -o check-index";
             installPhase = "install -Dm755 check-index $out/bin/check-index";
           };
+          media-page = pkgs.callPackage ./tools/media-page/package.nix { inherit wrapTool; };
           sec = pkgs.callPackage ./tools/sec/package.nix {
             bw = pkgs.bitwarden-cli;
             inherit (sec-tools-nixpkgs.legacyPackages.${system}) secretspec;
           };
           skills = pkgs.linkFarm "agent-workshop-skills" (
-            nixpkgs.lib.mapAttrsToList (
+            lib.mapAttrsToList (
               name: path:
               if builtins.pathExists "${path}/SKILL.md" then
                 { inherit name path; }
@@ -73,15 +80,18 @@
       );
 
       formatter = forEachSystem (system: formatting.${system}.config.build.wrapper);
+
       checks = forEachSystem (
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
           packages = self.packages.${system};
+          inherit (workshop.${system}) packageDirs ffmpeg;
         in
         {
           formatting = formatting.${system}.config.build.check self;
-          inherit (packages) check-index;
+          # Building a tool runs its test suite.
+          inherit (packages) check-index media-page;
           sec =
             pkgs.runCommand "sec-tests"
               {
@@ -99,24 +109,62 @@
                 }/bin/secretspec
                 touch "$out"
               '';
+          cabal-nix =
+            pkgs.runCommand "cabal-nix-current"
+              {
+                nativeBuildInputs = [
+                  pkgs.cabal2nix
+                  pkgs.nixfmt
+                ];
+              }
+              ''
+                export HOME=$TMPDIR
+                ${lib.concatStrings (
+                  lib.mapAttrsToList (name: dir: ''
+                    cp -r ${dir} package && chmod -R u+w package
+                    (cd package && cabal2nix . | nixfmt - > ../generated.nix)
+                    diff -u ${dir}/cabal.nix generated.nix || {
+                      echo "${name}: regenerate cabal.nix with: cabal2nix . | nixfmt - > cabal.nix"
+                      exit 1
+                    }
+                    rm -rf package generated.nix
+                  '') packageDirs
+                )}
+                touch "$out"
+              '';
+          media-page-render = import ./tools/media-page/test/render-check.nix {
+            inherit pkgs ffmpeg;
+            media-page = packages.media-page;
+          };
           writing-for-agents-reference = pkgs.runCommand "writing-for-agents-reference" { } ''
             test -r ${packages.skills}/writing-for-agents/SKILL-MECHANICS.md
             touch "$out"
           '';
         }
       );
+
       devShells = forEachSystem (
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          inherit (workshop.${system})
+            haskellPackages
+            packageDirs
+            ffmpeg
+            ffprobe
+            ;
         in
         {
-          default = pkgs.mkShell {
-            packages = [
-              (pkgs.ghc.withPackages (p: [ p.temporary ]))
+          default = haskellPackages.shellFor {
+            packages = hp: map (name: hp.${name}) (lib.attrNames packageDirs);
+            nativeBuildInputs = [
               pkgs.cabal-install
+              pkgs.cabal2nix
               pkgs.hlint
+              pkgs.nixfmt
             ];
+            MEDIA_PAGE_FFMPEG = ffmpeg;
+            MEDIA_PAGE_FFPROBE = ffprobe;
           };
         }
       );

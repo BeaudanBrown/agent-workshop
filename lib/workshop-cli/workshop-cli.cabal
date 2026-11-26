@@ -1,0 +1,17 @@
+cabal-version: 3.0
+name:          workshop-cli
+version:       0.1.0
+synopsis:      Runtime helpers shared by Agent Workshop tools
+build-type:    Simple
+
+common shared
+  default-language: GHC2021
+  ghc-options:      -Wall -Werror
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules: Workshop.Cli.Env
+  build-depends:
+    , base      >=4.18 && <5
+    , filepath

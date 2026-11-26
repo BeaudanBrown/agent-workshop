@@ -1,0 +1,61 @@
+cabal-version: 3.0
+name:          media-page
+version:       0.1.0
+synopsis:      Build self-contained HTML pages that present images and video
+build-type:    Simple
+
+common shared
+  default-language: GHC2021
+  ghc-options:      -Wall -Werror
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules:
+    Workshop.MediaPage.Build
+    Workshop.MediaPage.Cli
+    Workshop.MediaPage.Document
+    Workshop.MediaPage.Media
+    Workshop.MediaPage.Parse
+    Workshop.MediaPage.Render
+
+  other-modules:   Paths_media_page
+  autogen-modules: Paths_media_page
+  build-depends:
+    , base               >=4.18 && <5
+    , base16-bytestring
+    , base64-bytestring
+    , bytestring
+    , cryptohash-sha256
+    , directory
+    , filepath
+    , process
+    , text
+    , workshop-cli
+
+executable media-page
+  import:         shared
+  hs-source-dirs: app
+  main-is:        Main.hs
+  build-depends:
+    , base
+    , media-page
+
+-- Parser and golden rendering run anywhere; the pipeline examples need
+-- MEDIA_PAGE_FFMPEG and MEDIA_PAGE_FFPROBE. MEDIA_PAGE_UPDATE_GOLDEN=1
+-- rewrites test/golden after an intended rendering change.
+test-suite media-page-test
+  import:         shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:
+    , base
+    , bytestring
+    , directory
+    , filepath
+    , media-page
+    , process
+    , temporary
+    , text
+    , workshop-test
