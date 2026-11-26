@@ -53,6 +53,7 @@
     in
     {
       homeManagerModules.sec = import ./modules/home-manager/sec.nix { inherit self sec-tools-nixpkgs; };
+      nixosModules.abrec = import ./modules/nixos/abrec.nix { inherit self; };
 
       packages = forEachSystem (
         system:
@@ -131,6 +132,7 @@
             inherit pkgs ffmpeg;
             agent-page = packages.agent-page;
           };
+          abrec-module = import ./tools/abrec/test/module-check.nix { inherit self nixpkgs system; };
           writing-for-agents-reference = pkgs.runCommand "writing-for-agents-reference" { } ''
             test -r ${packages.skills}/writing-for-agents/SKILL-MECHANICS.md
             touch "$out"
